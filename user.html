@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>馆友 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="note-wrap">
+    <section id="userMain"></section>
+    <aside id="userSide"></aside>
+  </div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 馆友主页</footer>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('user');
+
+  const id = UI.param('id');
+  const d = S.load();
+  const u = d.users.find((x) => x.id === id);
+  const main = document.getElementById('userMain');
+  if (!u) {
+    main.innerHTML = '<div class="empty" style="padding:60px"><div class="ico">空</div><p>这位馆友不在。</p></div>';
+    return;
+  }
+  document.title = u.username + ' · 四夕酒馆';
+
+  const mine = u.id === me.id;
+  const following = S.isFollowing(u.id);
+
+  function visibleNotes() {
+    return S.load().notes
+      .filter((n) => n.userId === u.id && n.status === 'published' && S.canView(n.id))
+      .map((n) => S.note(n.id))
+      .sort((a, b) => S.hotScore(b) - S.hotScore(a));
+  }
+
+  function render() {
+    const notes = visibleNotes();
+    const likes = notes.reduce((a, n) => a + (n.likeCount || 0), 0);
+    const followers = S.load().follows.filter((f) => f.to === u.id).length;
+    const books = S.load().books.filter((b) => b.userId === u.id).length;
+
+    main.innerHTML = `
+      <div class="card" style="padding:28px 30px;display:flex;gap:22px;align-items:center;flex-wrap:wrap;
+           background:linear-gradient(120deg,rgba(255,253,248,.96),rgba(248,240,224,.86))">
+        <div class="profile-ava sm">
+          ${S.escapeHtml(u.username.slice(0, 1))}</div>
+        <div style="flex:1;min-width:220px">
+          <h1 style="font-family:var(--serif);font-size:26px;margin:0 0 6px;letter-spacing:.06em">${S.escapeHtml(u.username)}</h1>
+          <p class="muted" style="margin:0 0 10px;font-size:13.5px">${S.escapeHtml(u.signature || '这位馆友还没写签名。')}</p>
+          <div class="small muted">${books} 本书 · ${notes.length} 篇公开笔记 · 获赞 ${likes} · 关注者 ${followers}</div>
+        </div>
+        <div class="toolbar">
+          ${mine
+            ? '<a class="btn btn-sm" href="me.html">个人中心</a>'
+            : `<button class="btn btn-sm ${following ? '' : 'btn-primary'}" id="followBtn">${following ? '已关注 · 取关' : '＋ 关注'}</button>`}
+        </div>
+      </div>
+
+      <div class="section-head" style="margin:26px 0 14px"><h2>愿意分享的笔记</h2>
+        <span class="sub">按热度排列</span></div>
+      <div id="userNotes"></div>`;
+
+    const box = document.getElementById('userNotes');
+    box.innerHTML = notes.length ? notes.map((n) => `
+      <a class="card" href="note.html?id=${n.id}" style="display:flex;gap:16px;padding:18px 20px;margin-bottom:12px;align-items:center">
+        <div style="width:56px;flex:none">${UI.coverHTML(n.book || { title: '', color: 0 })}</div>
+        <div style="flex:1;min-width:0">
+          <h3 style="font-family:var(--serif);font-size:16.5px;margin:0 0 4px;font-weight:600">${S.escapeHtml(n.title)}</h3>
+          <p class="small muted" style="margin:0 0 6px">《${S.escapeHtml(n.book ? n.book.title : '')}》 · ${S.fmtTime(n.createdAt)}
+            ${n.anonymous ? ' · 匿名' : ''}</p>
+          <p class="small muted" style="margin:0">${S.escapeHtml(S.excerpt(n.content, 70))}…</p>
+        </div>
+        <div style="text-align:right;flex:none" class="small muted">
+          <div style="font-family:var(--serif);font-size:18px;color:var(--ink)">♡ ${n.likeCount}</div>
+          <div>赏 ${n.tipped || 0}</div>
+        </div>
+      </a>`).join('')
+      : '<div class="empty" style="padding:40px"><div class="ico">卷</div><p>还没有公开的笔记。</p></div>';
+
+    const fb = document.getElementById('followBtn');
+    if (fb) fb.onclick = () => {
+      const on = S.toggleFollow(u.id);
+      UI.toast(on ? '已关注' : '已取关');
+      render();
+    };
+
+    document.getElementById('userSide').innerHTML = `
+      <div class="side-card">
+        <h3>关于这位馆友</h3>
+        <p class="small" style="margin:0;line-height:2;color:var(--ink-2)">
+          加入于 ${new Date(u.createdAt).toLocaleDateString('zh-CN')}<br>
+          公开笔记 ${notes.length} 篇<br>
+          收到赞 ${likes} 个<br>
+          关注者 ${followers} 人
+        </p>
+      </div>
+      <div class="side-card">
+        <h3>同好</h3>
+        <div id="similar"></div>
+      </div>`;
+
+    const all = S.load().users.filter((x) => x.id !== u.id && x.role === 'user').slice(0, 5);
+    document.getElementById('similar').innerHTML = all.map((x) => `
+      <a class="mini-note" href="user.html?id=${x.id}">${S.escapeHtml(x.username)}
+        <em>${S.escapeHtml(x.signature || '酒馆的常客')}</em></a>`).join('');
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

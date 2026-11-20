@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>笔记 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="note-wrap">
+    <article class="note-main" id="noteMain"></article>
+    <aside id="noteSide"></aside>
+  </div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 读书笔记</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/card-assets.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('tavern');
+
+  const id = UI.param('id');
+  let n = id ? S.note(id) : null;
+  if (!n) {
+    const f = S.feed({ page: 0, size: 1 });
+    if (!f.items.length) {
+      document.getElementById('noteMain').innerHTML = '<div class="empty">这篇笔记不在了。</div>';
+      return;
+    }
+    n = f.items[0];
+  }
+  document.title = n.title + ' · 四夕酒馆';
+
+  if (!S.canView(n.id)) {
+    const owner = n.author ? n.author.username : '这位馆友';
+    const pending = n.status === 'pending';
+    document.getElementById('noteMain').innerHTML = pending
+      ? `<div class="empty" style="padding:64px 20px">
+          <div class="ico">卷</div>
+          <p>这篇笔记还没发布。<br>稍后就会出现在这里。</p>
+          <a class="btn" href="tavern.html">回酒肆</a>
+        </div>`
+      : `<div class="empty" style="padding:64px 20px">
+          <div class="ico">锁</div>
+          <p>这篇笔记只对「关注者」开放。<br>关注 ${S.escapeHtml(owner)} 之后就能读到。</p>
+          <button class="btn btn-primary" id="followGate">关注 ${S.escapeHtml(owner)}</button>
+          <a class="btn" href="tavern.html" style="margin-left:8px">回酒肆</a>
+        </div>`;
+    const gb = document.getElementById('followGate');
+    if (gb) gb.onclick = () => {
+      S.toggleFollow(n.userId);
+      UI.toast('已关注，正在刷新');
+      setTimeout(() => location.reload(), 400);
+    };
+    return;
+  }
+
+  const anonName = '无名酒客';
+  const authorName = n.anonymous ? anonName : (n.author ? n.author.username : '佚名');
+  const book = n.book || { title: '佚名之书', author: '', isbn: '' };
+  const visLabel = UI.visibilityLabel(n.visibility);
+
+  function render() {
+    const liked = S.hasLiked(n.id);
+    document.getElementById('noteMain').innerHTML = `
+      <div class="note-bookbar">
+        ${UI.coverHTML(book)}
+        <div class="bk">
+          <h2>《${S.escapeHtml(book.title)}》</h2>
+          <p>${S.escapeHtml(book.author || '佚名')}${book.publisher ? ' · ' + S.escapeHtml(book.publisher) : ''}
+             ${book.isbn ? ` · ISBN ${book.isbn} · <a href="isbn.html?isbn=${book.isbn}">同书笔记</a>` : ''}</p>
+        </div>
+      </div>
+
+      <h1 class="note-title">${S.escapeHtml(n.title)}</h1>
+      <div class="note-byline">
+        ${UI.avatar(authorName)}
+        <b>${S.escapeHtml(authorName)}</b>
+        ${n.anonymous ? '<span class="badge badge-anon">匿名分享</span>' : '<span class="badge badge-real">实名</span>'}
+        <span>·</span><span>${S.fmtTime(n.createdAt)}</span>
+        ${n.page ? `<span>·</span><span>第 ${S.escapeHtml(n.page)} 页</span>` : ''}
+        <span>·</span><span>${visLabel}</span>
+        ${n.status !== 'published' ? `<span class="badge badge-pending">${n.status === 'pending' ? '待发布' : n.status === 'draft' ? '草稿' : '未发布'}</span>` : ''}
+        ${n.status === 'draft' && n.userId === me.id ? '<button class="btn btn-sm" id="publishDraft">提交发布</button>' : ''}
+      </div>
+
+      <div class="note-body">${S.nl2p(n.content)}</div>
+
+      <div class="tag-row">${(n.tags || []).map((t) => `<span class="chip"># ${S.escapeHtml(t)}</span>`).join('')}</div>
+
+      <div class="note-foot">
+        <div class="note-actions">
+          <button class="btn ${liked ? 'tip-btn tipped' : ''}" id="likeBtn">
+            ${liked ? '♥' : '♡'} <span id="likeCount">${n.likeCount}</span>
+          </button>
+          <button class="btn btn-primary tip-btn" id="tipBtn">
+            <span>当赏一壶酒</span>
+            <span class="small" style="opacity:.8">余 <b id="myWine">${S.wallet().balance}</b> 壶</span>
+          </button>
+          <button class="btn" id="shareBtn">分享</button>
+          ${n.userId === me.id
+            ? `<button class="btn" id="editBtn">编辑</button>
+               <button class="btn" id="delBtn" style="color:var(--cinnabar);border-color:rgba(163,58,47,.25)">删除</button>`
+            : `<button class="btn btn-ghost" id="reportBtn">举报</button>`}
+        </div>
+        <span class="small muted">读完若有所得，可以请作者喝一壶</span>
+      </div>
+
+      <section class="comments">
+        <h3>评论 <span class="small muted" style="font-family:var(--sans)">${n.commentCount}</span></h3>
+        <div class="comment-form">
+          <textarea class="textarea" id="cText" placeholder="说点什么。不必客气，也别伤人。" style="min-height:88px"></textarea>
+          <div class="row">
+            <label class="checkline"><input type="checkbox" id="cAnon"> 匿名评论</label>
+            <button class="btn btn-primary btn-sm" id="cSend">发表</button>
+          </div>
+        </div>
+        <div id="commentList"></div>
+      </section>
+
+      <div class="ad-slot" style="margin-top:28px" data-ad-slot="note-bottom-1">
+        <b>广告位</b> · note-bottom-1 · 尚未接入（后台可配置代码）
+      </div>`;
+
+    bindMain();
+    renderComments();
+    renderSide();
+    UI.renderAds();
+  }
+
+  function bindMain() {
+    const likeBtn = document.getElementById('likeBtn');
+    bindLikeAgain(likeBtn);
+
+    const tipBtn = document.getElementById('tipBtn');
+    tipBtn.onclick = () => {
+      if (n.userId === me.id) { UI.toast('自己的笔记，不必当赏'); return; }
+      const r = S.tipNote(n.id, 1);
+      if (!r.ok) {
+        if (r.reason === 'no_money') {
+          UI.toast('酒不够了。明天登录会再送 3 壶');
+          setTimeout(() => (location.href = 'me.html'), 900);
+        } else {
+          UI.toast('这次没赏成，稍后再试');
+        }
+        return;
+      }
+      n.tipped = r.tipped;
+      const w = document.getElementById('myWine');
+      if (w) w.textContent = r.balance;
+      document.querySelector('[data-tip-count]')?.remove();
+      UI.playTip(tipBtn);
+      UI.toast(r.credited ? '作者收满 5 壶，折了 1 壶入账' : '酒钱已记在账上，谢过');
+    };
+
+    const pubBtn = document.getElementById('publishDraft');
+    if (pubBtn) pubBtn.onclick = () => {
+      const r = S.publishDraft(n.id);
+      UI.toast(r.hits && r.hits.length ? '这段暂时发不出去，换个说法试试' : '已保存');
+      n = S.note(n.id); render();
+    };
+    const editBtn = document.getElementById('editBtn');
+    if (editBtn) editBtn.onclick = editModal;
+    const delBtn = document.getElementById('delBtn');
+    if (delBtn) delBtn.onclick = () => {
+      const m = UI.modal(`
+        <h3>删掉这篇笔记？</h3>
+        <p class="sub">正文与它下面的评论会一起消失，无法恢复。</p>
+        <div class="modal-foot">
+          <button class="btn" data-close>再想想</button>
+          <button class="btn btn-primary" id="okDel">确认删除</button>
+        </div>`);
+      m.querySelector('[data-close]').onclick = UI.closeModal;
+      m.querySelector('#okDel').onclick = () => {
+        S.removeNote(n.id); UI.closeModal(); UI.toast('已删除');
+        setTimeout(() => (location.href = 'shelf.html'), 400);
+      };
+    };
+    const reportBtn = document.getElementById('reportBtn');
+    if (reportBtn) reportBtn.onclick = () => reportModal('note', n.id, '这篇笔记');
+
+    document.getElementById('shareBtn').onclick = shareModal;
+
+    document.getElementById('cSend').onclick = () => {
+      const ta = document.getElementById('cText');
+      const txt = ta.value.trim();
+      if (txt.length < 2) { UI.toast('再写长一点'); return; }
+      const r = S.addComment(n.id, txt, document.getElementById('cAnon').checked);
+      if (r.error) { UI.toast(r.error); return; }
+      ta.value = '';
+      UI.toast('已发出');
+      setTimeout(() => { n = S.note(n.id); render(); }, 4200);
+    };
+  }
+
+  function bindLikeAgain(btn) {
+    btn.onclick = () => {
+      const total = S.likeNote(n.id);
+      const on = S.hasLiked(n.id);
+      btn.className = 'btn ' + (on ? 'tipped' : '');
+      btn.innerHTML = `${on ? '♥' : '♡'} <span id="likeCount">${total}</span>`;
+      n.likeCount = total;
+      bindLikeAgain(btn);
+    };
+  }
+
+  function renderComments() {
+    const list = S.comments(n.id);
+    const box = document.getElementById('commentList');
+    if (!list.length) {
+      box.innerHTML = `<div class="empty" style="padding:26px"><p>还没有人说话，你可以开个头。</p></div>`;
+      return;
+    }
+    box.innerHTML = '<div class="comment-list">' + list.map((c) => {
+      const name = c.anonymous ? '无名酒客' : (c.author ? c.author.username : '佚名');
+      const liked = (c.likes || []).includes(me.id);
+      return `<div class="comment" data-c="${c.id}">
+        <span class="ava ${c.anonymous ? 'anon' : ''}">${S.escapeHtml(name.slice(0, 1))}</span>
+        <div class="c-main">
+          <div class="c-head">
+            <b>${S.escapeHtml(name)}</b>
+            ${c.anonymous ? '<span class="badge badge-anon">匿名</span>' : '<span class="badge badge-real">实名</span>'}
+            <span class="c-time">${S.fmtTime(c.createdAt)}</span>
+            
+          </div>
+          <div class="c-text">${S.escapeHtml(c.content)}</div>
+          <div class="c-actions">
+            <button class="like-btn ${liked ? 'on' : ''}" data-like="${c.id}">♡ <span data-cn>${c.totalLikes}</span></button>
+
+            ${c.userId === me.id ? '<button class="like-btn" data-cdel="' + c.id + '">删除</button>' : '<button class="like-btn" data-creport="' + c.id + '">举报</button>'}
+          </div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+
+    box.querySelectorAll('[data-like]').forEach((btn) => {
+      btn.onclick = () => {
+        const total = S.likeComment(btn.dataset.like);
+        const on = btn.classList.toggle('on');
+        btn.querySelector('[data-cn]').textContent = total;
+        // 重新排序
+        setTimeout(() => { n = S.note(n.id); renderComments(); }, 260);
+      };
+    });
+  }
+
+  function renderSide() {
+    const sameIsbn = book.isbn
+      ? S.booksByIsbn(book.isbn).flatMap((b) => S.notesOfBook(b.id))
+        .filter((x) => x.status === 'published')
+        .sort((a, b) => b.likeCount - a.likeCount)
+      : [];
+    const others = S.feed({ page: 0, size: 4 }).items.filter((x) => x.id !== n.id);
+
+    document.getElementById('noteSide').innerHTML = `
+      <div class="side-card">
+        <h3>写这篇的人</h3>
+        <div class="author-line">
+          ${UI.avatar(authorName)}
+          <div><b>${n.anonymous ? S.escapeHtml(authorName) : `<a href="user.html?id=${n.userId}" style="border-bottom:1px dotted rgba(90,80,70,.3)">${S.escapeHtml(authorName)}</a>`}</b><span>${n.anonymous ? '选择隐去姓名' : (n.author && n.author.signature ? S.escapeHtml(n.author.signature) : '酒馆的常客')}</span></div>
+        </div>
+        ${(!n.anonymous && n.userId !== me.id) ? `<button class="btn btn-sm" id="followBtn" style="width:100%">${S.isFollowing(n.userId) ? '已关注 · 点击取关' : '＋ 关注这位馆友'}</button>` : ''}
+      </div>
+
+      ${sameIsbn.length > 1 ? `
+      <div class="side-card">
+        <h3>同一本书的笔记</h3>
+        ${sameIsbn.slice(0, 5).map((x) => `
+          <a class="mini-note" href="note.html?id=${x.id}">${S.escapeHtml(x.title)}
+            <em>♡ ${x.likeCount} · ${x.anonymous ? '匿名' : S.escapeHtml(x.author ? x.author.username : '')}</em>
+          </a>`).join('')}
+        <a class="btn btn-sm" style="width:100%;margin-top:12px" href="isbn.html?isbn=${book.isbn}">查看全部同书笔记</a>
+      </div>` : ''}
+
+      <div class="side-card">
+        <h3>酒肆里还有</h3>
+        ${others.map((x) => `<a class="mini-note" href="note.html?id=${x.id}">${S.escapeHtml(x.title)}
+          <em>《${S.escapeHtml(x.book ? x.book.title : '')}》</em></a>`).join('')}
+      </div>
+
+      <div class="ad-slot ad-slot-side" data-ad-slot="note-side-1">
+        <b>广告位</b> · note-side-1
+      </div>
+
+`;
+  }
+
+  function editModal() {
+    const m = UI.modal(`
+      <h3>修改这篇笔记</h3>
+      <p class="sub">改完保存即可。</p>
+      <div class="field"><label>标题</label><input class="input" id="eTitle" value="${S.escapeHtml(n.title)}"></div>
+      <div class="grid-2">
+        <div class="field"><label>页码 <span class="hint">（选填）</span></label><input class="input" id="ePage" value="${S.escapeHtml(n.page || '')}" placeholder="如 42"></div>
+        <div class="field"><label>标签（逗号分隔）</label><input class="input" id="eTags" value="${S.escapeHtml((n.tags || []).join(', '))}"></div>
+      </div>
+      <div class="field"><label>正文</label><textarea class="textarea" id="eBody" style="min-height:200px">${S.escapeHtml(n.content)}</textarea></div>
+      <div class="grid-2">
+        <div class="field"><label>谁可以看</label>
+          <select class="select" id="eVis">
+            <option value="public" ${n.visibility === 'public' ? 'selected' : ''}>所有人可见</option>
+            <option value="followers" ${n.visibility === 'followers' ? 'selected' : ''}>仅关注者可见</option>
+            <option value="private" ${n.visibility === 'private' ? 'selected' : ''}>仅自己可见</option>
+          </select>
+        </div>
+      </div>
+      <label class="checkline"><input type="checkbox" id="eAnon" ${n.anonymous ? 'checked' : ''}> 匿名分享</label>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="eSave">保存修改</button>
+      </div>`, { wide: true });
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#eSave').onclick = () => {
+      const r = S.updateNote(n.id, {
+        title: m.querySelector('#eTitle').value.trim() || n.title,
+        content: m.querySelector('#eBody').value.trim() || n.content,
+        page: m.querySelector('#ePage').value.trim(),
+        visibility: m.querySelector('#eVis').value,
+        anonymous: m.querySelector('#eAnon').checked,
+        tags: m.querySelector('#eTags').value.split(/[,，\s]+/).filter(Boolean),
+      });
+      UI.closeModal();
+      if (r.hits && r.hits.length) UI.toast('这段暂时发不出去，换个说法试试');
+      else UI.toast('已保存');
+      n = S.note(n.id); render();
+    };
+  }
+
+  /* ---------- 分享卡 ---------- */
+  function downloadText(text, name, mime) {
+    const blob = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 1500);
+  }
+
+  function loadImg(src) {
+    return new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = src;
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function wrapLines(ctx, text, maxW) {
+    const lines = [];
+    let line = '';
+    for (const ch of String(text)) {
+      const test = line + ch;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = ch; }
+      else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  async function drawCover(ctx, b, x, y, w, h) {
+    ctx.save();
+    roundRect(ctx, x, y, w, h, 3);
+    ctx.clip();
+    if (b.cover) {
+      try {
+        const im = await loadImg(b.cover);
+        const s = Math.max(w / im.width, h / im.height);
+        ctx.drawImage(im, x + (w - im.width * s) / 2, y + (h - im.height * s) / 2, im.width * s, im.height * s);
+      } catch (e) { b = { ...b, cover: null }; }
+    }
+    if (!b.cover) {
+      const pair = S.colorPair(b.color || 0);
+      const g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, pair[0]); g.addColorStop(1, pair[1]);
+      ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+      // 题签
+      const lw = w * 0.3, lh = h * 0.72, lx = x + (w - lw) / 2, ly = y + h * 0.1;
+      ctx.fillStyle = '#efe5cf'; ctx.fillRect(lx, ly, lw, lh);
+      ctx.strokeStyle = 'rgba(90,70,45,.35)'; ctx.lineWidth = 1; ctx.strokeRect(lx, ly, lw, lh);
+      // 竖排书名
+      const raw = String(b.title || '');
+      const size = raw.length <= 4 ? w * 0.125 : raw.length <= 7 ? w * 0.105 : raw.length <= 10 ? w * 0.088 : w * 0.075;
+      ctx.fillStyle = '#241f1a';
+      ctx.font = `${size}px "Noto Serif SC","Songti SC",serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const cx = lx + lw / 2;
+      let cy = ly + lh * 0.12 + size * 0.6;
+      for (const ch of raw.slice(0, 9)) {
+        ctx.fillText(ch, cx, cy);
+        cy += size * 1.22;
+        if (cy > ly + lh - size * 0.4) break;
+      }
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(58,48,38,.14)'; ctx.lineWidth = 1.5;
+    roundRect(ctx, x, y, w, h, 3); ctx.stroke();
+  }
+
+  async function buildCard(allowImages) {
+    const W = 1080, M = 72, CW = W - M * 2;
+    const SERIF = '"Noto Serif SC","Songti SC",serif';
+    const SANS = '"Noto Sans SC","PingFang SC",sans-serif';
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+
+    // ---------- 先排版，算出需要多高 ----------
+    const TITLE_Y_PRE = 232 + 235 + 58;
+    const titleFont = '600 46px ' + SERIF;
+    const bodyFont = '26px ' + SERIF;
+    const LH = 44;
+
+    ctx.font = titleFont;
+    const titleLines = wrapLines(ctx, (n.page ? '第 ' + n.page + ' 页 · ' : '') + n.title, CW);
+
+    ctx.font = bodyFont;
+    const INDENT = 52; // 2 个字（26px × 2）
+    const paras = String(n.content || '').replace(/\r\n/g, '\n').split(/\n+/).map((t) => t.trim()).filter(Boolean);
+    const rows = [];
+    function wrapIndent(text, maxW, indent) {
+      const out = []; let line = ''; let first = true;
+      const limit = () => maxW - (first ? indent : 0);
+      for (const ch of text) {
+        if (line && ctx.measureText(line + ch).width > limit()) {
+          out.push({ t: line, ind: first });
+          first = false; line = ch;
+        } else {
+          line += ch;
+        }
+      }
+      if (line) out.push({ t: line, ind: first });
+      return out;
+    }
+    paras.forEach((p, pi) => {
+      const ls = wrapIndent(p.replace(/^>\s?/, ''), CW, INDENT);
+      ls.forEach((l, li) => rows.push({ t: l.t, ind: l.ind, gap: (pi > 0 && li === 0) ? 16 : 0 }));
+    });
+
+    // 极端长文：画布高度超过浏览器上限会失败，这里截断并提示
+    const MAX_H = 20000;
+    const rowsH = (arr) => arr.reduce((a, r) => a + r.gap + LH, 0);
+    let maxRows = rows.length;
+    while (maxRows > 0 && (TITLE_Y_PRE + titleLines.length * 62 + 18 + rowsH(rows.slice(0, maxRows)) + 420) > MAX_H) {
+      maxRows -= 4;
+    }
+    if (maxRows < rows.length) {
+      rows.length = Math.max(maxRows, 1);
+      rows.push({ t: '……（全文请在网页中阅读）', gap: 16 });
+    }
+
+    const TOP = 176;
+    const COVER_Y = 232, COVER_W = 176, COVER_H = 235;
+    const TITLE_Y = COVER_Y + COVER_H + 58;
+    let y = TITLE_Y + titleLines.length * 62 + 18;
+    rows.forEach((r) => { y += r.gap + LH; });
+    const bodyBottom = y;
+
+    const tags = (n.tags || []).slice(0, 6);
+    const tagsY = bodyBottom + 10;
+
+    let footLineY = bodyBottom + (tags.length ? 88 : 44);
+    let footY = footLineY + 58;
+    const H = Math.max(1440, Math.round(footY + 120));
+    // 短内容：把页脚压到卡片底部，避免中间空一大块
+    if (H - (footY + 120) > 90) {
+      footLineY = H - 236;
+      footY = H - 176;
+    }
+
+    c.width = W; c.height = H;
+
+    // ---------- 背景 ----------
+    ctx.fillStyle = '#f6f1e6'; ctx.fillRect(0, 0, W, H);
+    const g = ctx.createRadialGradient(W * 0.2, 0, 0, W * 0.2, 0, W * 1.1);
+    g.addColorStop(0, 'rgba(176,141,87,.10)'); g.addColorStop(1, 'rgba(176,141,87,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(58,48,38,.16)'; ctx.lineWidth = 2;
+    ctx.strokeRect(40, 40, W - 80, H - 80);
+
+    // ---------- 顶栏：图标 + 站名 ----------
+    let logoW = 0;
+    if (allowImages) try {
+      const t = await loadImg((window.CARD_ASSETS && CARD_ASSETS.title) || 'assets/img/title.png');
+      const th = 96; logoW = th * t.width / t.height;
+      ctx.globalAlpha = 0.95; ctx.drawImage(t, M, 48, logoW, th); ctx.globalAlpha = 1;
+    } catch (e) {}
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(90,80,70,.62)'; ctx.font = '20px ' + SANS;
+    const brand = '四夕酒馆 · 读书笔记';
+    const bw = ctx.measureText(brand).width;
+    ctx.fillText(brand, Math.min(M + logoW + 3.5 * bw, W - M - bw), 96);
+    ctx.strokeStyle = 'rgba(58,48,38,.12)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(M, TOP); ctx.lineTo(W - M, TOP); ctx.stroke();
+
+    // ---------- 书封 ----------
+    if (allowImages) {
+      await drawCover(ctx, book, M, COVER_Y, COVER_W, COVER_H);
+    } else {
+      ctx.fillStyle = 'rgba(78,107,96,.9)';
+      roundRect(ctx, M, COVER_Y, COVER_W, COVER_H, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(246,241,230,.92)';
+      ctx.font = '600 20px ' + SERIF; ctx.textAlign = 'center';
+      ctx.fillText('《' + (book.title || '').slice(0, 6) + '》', M + COVER_W / 2, COVER_Y + COVER_H / 2);
+      ctx.textAlign = 'left';
+    }
+
+    // ---------- 书名 / 作者 ----------
+    const bx = M + COVER_W + 32;
+    const bMax = W - M - bx;
+    ctx.fillStyle = '#211d18'; ctx.font = '600 34px ' + SERIF;
+    const bLines = wrapLines(ctx, '《' + (book.title || '') + '》', bMax).slice(0, 2);
+    bLines.forEach((l, i) => ctx.fillText(l, bx, COVER_Y + 56 + i * 44));
+    ctx.fillStyle = 'rgba(75,67,58,.8)'; ctx.font = '21px ' + SANS;
+    ctx.fillText((book.author || '佚名') + (book.publisher ? ' · ' + book.publisher : ''), bx, COVER_Y + 56 + bLines.length * 44 + 22);
+    if (book.isbn) {
+      ctx.fillStyle = 'rgba(139,128,115,.9)'; ctx.font = '17px ' + SANS;
+      ctx.fillText('ISBN ' + book.isbn, bx, COVER_Y + 56 + bLines.length * 44 + 50);
+    }
+
+    // ---------- 笔记标题（紧跟书封，间距收紧） ----------
+    ctx.fillStyle = '#211d18'; ctx.font = titleFont;
+    titleLines.forEach((l, i) => ctx.fillText(l, M, TITLE_Y + i * 62 + 44));
+
+    // ---------- 正文（全文，不截断） ----------
+    ctx.fillStyle = 'rgba(60,52,44,.9)'; ctx.font = bodyFont;
+    let by = TITLE_Y + titleLines.length * 62 + 18;
+    rows.forEach((r) => {
+      by += r.gap;
+      ctx.fillText(r.t, M + (r.ind ? INDENT : 0), by + 32);
+      by += LH;
+    });
+
+    // ---------- 标签 ----------
+    if (tags.length) {
+      ctx.font = '22px ' + SANS;
+      let tx = M;
+      tags.forEach((t) => {
+        const label = '# ' + t;
+        const tw = ctx.measureText(label).width + 34;
+        if (tx + tw > W - M) return;
+        ctx.strokeStyle = 'rgba(58,48,38,.18)'; ctx.lineWidth = 1;
+        roundRect(ctx, tx, tagsY, tw, 42, 21); ctx.stroke();
+        ctx.fillStyle = 'rgba(90,80,70,.85)';
+        ctx.fillText(label, tx + 17, tagsY + 28);
+        tx += tw + 12;
+      });
+    }
+
+    // ---------- 页脚 ----------
+    ctx.strokeStyle = 'rgba(58,48,38,.12)';
+    ctx.beginPath(); ctx.moveTo(M, footLineY); ctx.lineTo(W - M, footLineY); ctx.stroke();
+
+    ctx.fillStyle = 'rgba(75,67,58,.9)'; ctx.font = '26px ' + SERIF;
+    ctx.fillText(authorName, M, footY);
+    ctx.fillStyle = 'rgba(139,128,115,.95)'; ctx.font = '22px ' + SANS;
+    const dl = new Date(n.createdAt);
+    ctx.fillText(`${dl.getFullYear()}-${String(dl.getMonth() + 1).padStart(2, '0')}-${String(dl.getDate()).padStart(2, '0')}　♡ ${n.likeCount}　评 ${n.commentCount}`, M, footY + 40);
+
+    // ---------- 印章 ----------
+    if (allowImages) try {
+      const seal = await loadImg((window.CARD_ASSETS && CARD_ASSETS.seal) || 'assets/img/seal2.png');
+      ctx.globalAlpha = 0.34;
+      const sh = 120, sw = sh * seal.width / seal.height;
+      ctx.drawImage(seal, W - M - sw, H - 84 - sh, sw, sh);
+      ctx.globalAlpha = 1;
+    } catch (e) {}
+
+    return c.toDataURL('image/png');
+  }
+
+  async function shareModal() {
+    const m = UI.modal(`
+      <h3>把这篇递出去</h3>
+      <p class="sub">生成一张竖版分享卡，适合发在朋友圈或聊天里。</p>
+      <div id="cardBox" style="border-radius:8px;overflow:auto;background:rgba(90,80,70,.06);
+           min-height:280px;max-height:60vh;display:flex;align-items:flex-start;justify-content:center;margin-bottom:10px">
+        <span class="small muted">正在排版…</span>
+      </div>
+      <p class="small muted" style="text-align:center;margin:0 0 14px">长笔记会自动加长，预览区可上下滑动查看整张</p>
+      <div class="toolbar" style="justify-content:flex-end">
+        <button class="btn" data-close>收起</button>
+        <button class="btn" id="copyLink">复制链接</button>
+        <button class="btn" id="mdNote">导出 Markdown</button>
+        <button class="btn" id="printNote">打印 / 存 PDF</button>
+        <a class="btn btn-primary" id="dlCard" download="四夕酒馆-${S.escapeHtml(n.title)}.png" style="opacity:.45;pointer-events:none">保存图片</a>
+      </div>`, { wide: true });
+
+    m.querySelector('#copyLink').onclick = async () => {
+      try { await navigator.clipboard.writeText(location.href); UI.toast('链接已复制'); }
+      catch (e) { UI.toast('复制失败，可手动复制地址栏'); }
+    };
+    m.querySelector('#mdNote').onclick = () => {
+      const md = S.noteMarkdown(n.id);
+      downloadText(md, (n.title || '笔记') + '.md', 'text/markdown');
+      UI.toast('已导出 Markdown');
+    };
+    m.querySelector('#printNote').onclick = () => { UI.closeModal(); setTimeout(() => window.print(), 200); };
+
+    let url = null;
+    const canUseImages = true;
+    try {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      url = await buildCard(canUseImages);
+    } catch (e) {
+      url = null;
+    }
+    if (!url) {
+      try { url = await buildCard(false); } catch (e) { url = null; }
+    }
+
+    const box = m.querySelector('#cardBox');
+    const dl = m.querySelector('#dlCard');
+    if (url) {
+      box.innerHTML = `<div style="width:100%">
+        <img src="${url}" alt="分享卡" style="width:100%;display:block">
+        <p class="small muted" style="text-align:center;margin:8px 0 0">手机上长按图片也能保存</p>
+      </div>`;
+      dl.href = url;
+      dl.style.opacity = '1';
+      dl.style.pointerEvents = 'auto';
+      if (!canUseImages) UI.toast('本地直接打开时，卡片用纯文字版；用 localhost 打开可带图');
+    } else {
+      box.innerHTML = '<span class="small muted">分享卡没生成出来，可以先复制链接或导出 Markdown。</span>';
+      UI.toast('分享卡生成失败，请换浏览器或改用 localhost 打开');
+    }
+  }
+
+  function reportModal(targetType, targetId, label) {
+    const m = UI.modal(`
+      <h3>举报${label}</h3>
+      <p class="sub">举报会进入驿站，由馆主处理。请尽量说清问题。</p>
+      <div class="field"><label>原因</label>
+        <select class="select" id="rpReason">
+          <option>广告或导流</option>
+          <option>辱骂或人身攻击</option>
+          <option>色情低俗</option>
+          <option>违法或危险内容</option>
+          <option>抄袭或侵权</option>
+          <option>其他</option>
+        </select>
+      </div>
+      <div class="field"><label>补充说明（选填）</label><textarea class="textarea" id="rpText" style="min-height:80px"></textarea></div>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="rpSend">提交举报</button>
+      </div>`);
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#rpSend').onclick = () => {
+      const reason = m.querySelector('#rpReason').value +
+        (m.querySelector('#rpText').value.trim() ? '：' + m.querySelector('#rpText').value.trim() : '');
+      S.report(targetType, targetId, reason);
+      UI.closeModal(); UI.toast('已提交，馆主会尽快处理');
+    };
+  }
+
+  document.addEventListener('click', (e) => {
+    const f = e.target.closest('#followBtn');
+    if (f) {
+      const on = S.toggleFollow(n.userId);
+      f.textContent = on ? '已关注 · 点击取关' : '＋ 关注这位馆友';
+      UI.toast(on ? '已关注' : '已取关');
+    }
+    const cr = e.target.closest('[data-creport]');
+    if (cr) { e.preventDefault(); reportModal('comment', cr.dataset.creport, '这条评论'); }
+    const cd = e.target.closest('[data-cdel]');
+    if (cd) {
+      S.removeComment(cd.dataset.cdel);
+      UI.toast('评论已删除');
+      n = S.note(n.id); renderComments();
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

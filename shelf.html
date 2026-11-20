@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的酒架 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="shelf-layout">
+    <!-- 左：分类 -->
+    <aside class="side">
+      <div class="side-block">
+        <p class="side-title">书架分类</p>
+        <div id="catList"></div>
+        <div class="cat-manage-bar">
+          <button class="btn btn-ghost btn-sm" id="addCatBtn">＋ 新建</button>
+        </div>
+      </div>
+      <div class="side-block">
+        <p class="side-title">快捷</p>
+        <div class="cat-item" data-jump="tavern"><span><span class="dot"></span>去酒肆看看</span></div>
+        <div class="cat-item" data-jump="isbn"><span><span class="dot"></span>按 ISBN 寻书</span></div>
+        <div class="cat-item" data-jump="reading"><span><span class="dot"></span>阅读小结</span></div>
+      </div>
+    </aside>
+
+    <!-- 右：书架 -->
+    <section>
+      <div class="shelf-head">
+        <div>
+          <h1 class="greet" id="greet">我的酒架</h1>
+          <div class="stats-inline" id="statLine"></div>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="isbnBtn">ISBN 导入</button>
+          <button class="btn" id="addBookBtn">＋ 新建书籍</button>
+          <button class="btn btn-primary" id="writeBtn">写一篇笔记</button>
+        </div>
+      </div>
+
+      <div id="shelfBody"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 读书笔记 —— 一页一页，把日子读薄</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('shelf');
+
+  let activeCat = 'all';
+
+  /* ---------- 侧栏 ---------- */
+  let dragId = null;
+
+  const GRIP_SVG = '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">' +
+    '<path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>';
+
+  function catRow(c) {
+    const on = activeCat === c.id ? 'on' : '';
+    return `<div class="cat-item has-actions ${on}" data-cat="${c.id}">
+        <span class="cat-name" title="双击可改名">${S.escapeHtml(c.name)}</span>
+        <span class="n">${c.count}</span>
+        <span class="cat-actions">
+          <button class="cat-more" title="更多" aria-label="更多操作">⋯</button>
+          <span class="cat-grip" draggable="true" title="拖动排序" aria-label="拖动排序">${GRIP_SVG}</span>
+        </span>
+      </div>`;
+  }
+
+  function renderCats() {
+    const cats = S.categories(me.id);
+    const all = S.books(me.id);
+    const html = [
+      `<div class="cat-item ${activeCat === 'all' ? 'on' : ''}" data-cat="all">
+         <span class="cat-name">全部藏书</span><span class="n">${all.length}</span></div>`,
+      ...cats.map(catRow),
+      `<div class="cat-item ${activeCat === 'none' ? 'on' : ''}" data-cat="none">
+         <span class="cat-name">未分类</span><span class="n">${all.filter((b) => !b.categoryId).length}</span></div>`,
+    ].join('');
+    const box = document.getElementById('catList');
+    box.innerHTML = html;
+    bindCatActions(box);
+  }
+
+  function bindCatActions(box) {
+    // 拖动排序：只能从右侧的「三条横杠」开始拖，避免误触
+    box.querySelectorAll('.cat-grip').forEach((grip) => {
+      const row = grip.closest('.cat-item');
+      grip.addEventListener('dragstart', (e) => {
+        dragId = row.dataset.cat;
+        row.classList.add('dragging');
+        if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); }
+      });
+      grip.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        box.querySelectorAll('.drop-target').forEach((x) => x.classList.remove('drop-target'));
+      });
+    });
+
+    box.querySelectorAll('.cat-item[data-cat]').forEach((row) => {
+      if (!row.querySelector('.cat-grip')) return;
+      row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drop-target'); });
+      row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drop-target');
+        if (!dragId || dragId === row.dataset.cat) return;
+        const ids = [...box.querySelectorAll('.cat-item[data-cat]')]
+          .map((x) => x.dataset.cat)
+          .filter((x) => x !== 'all' && x !== 'none');
+        const from = ids.indexOf(dragId);
+        const to = ids.indexOf(row.dataset.cat);
+        if (from < 0 || to < 0) return;
+        ids.splice(from, 1);
+        ids.splice(to, 0, dragId);
+        S.reorderCategories(ids);
+        renderCats();
+      });
+    });
+
+    box.querySelectorAll('.cat-more').forEach((btn) => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); openCatMenu(btn); });
+    });
+
+    box.querySelectorAll('.cat-name').forEach((nameEl) => {
+      nameEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const row = nameEl.closest('.cat-item');
+        if (row && row.dataset.cat !== 'all' && row.dataset.cat !== 'none') renameCat(row.dataset.cat);
+      });
+    });
+  }
+
+  let catMenuEl = null;
+  function closeCatMenu() {
+    if (catMenuEl) { catMenuEl.remove(); catMenuEl = null; }
+  }
+  function openCatMenu(btn) {
+    closeCatMenu();
+    const row = btn.closest('.cat-item');
+    const id = row.dataset.cat;
+    const menu = document.createElement('div');
+    menu.className = 'cat-menu';
+    menu.innerHTML = `
+      <button data-act="rename">重命名</button>
+      <button data-act="up">上移</button>
+      <button data-act="down">下移</button>
+      <button data-act="del" class="danger">删除</button>`;
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = Math.round(r.bottom + 6) + 'px';
+    menu.style.left = Math.round(Math.min(r.left, window.innerWidth - 150)) + 'px';
+    catMenuEl = menu;
+
+    menu.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const act = b.dataset.act;
+        closeCatMenu();
+        if (act === 'rename') renameCat(id);
+        else if (act === 'up') { S.moveCategory(id, -1); renderCats(); }
+        else if (act === 'down') { S.moveCategory(id, 1); renderCats(); }
+        else if (act === 'del') deleteCat(id);
+      });
+    });
+
+    setTimeout(() => {
+      document.addEventListener('click', closeCatMenu, { once: true });
+      document.addEventListener('keydown', function esc(ev) {
+        if (ev.key === 'Escape') { closeCatMenu(); document.removeEventListener('keydown', esc); }
+      });
+    }, 0);
+  }
+
+  document.getElementById('catList').addEventListener('click', (e) => {
+    if (e.target.closest('.cat-more') || e.target.closest('.cat-grip')) return;
+    const el = e.target.closest('[data-cat]');
+    if (!el) return;
+    activeCat = el.dataset.cat;
+    renderCats(); renderBooks();
+  });
+
+  function renameCat(id) {
+    const cat = S.categories(me.id).find((c) => c.id === id);
+    if (!cat) return;
+    const m = UI.modal(`
+      <h3>重命名分类</h3>
+      <p class="sub">改个你顺手叫的名字。</p>
+      <div class="field"><label>分类名</label><input class="input" id="rcName" maxlength="20"></div>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="rcSave">保存</button>
+      </div>`);
+    const input = m.querySelector('#rcName');
+    input.value = cat.name;
+    input.focus(); input.select();
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    const save = () => {
+      const v = input.value.trim();
+      if (!v) { UI.toast('名字不能为空'); return; }
+      S.renameCategory(id, v);
+      UI.closeModal(); renderCats(); UI.toast('已改名');
+    };
+    m.querySelector('#rcSave').onclick = save;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+  }
+
+  function deleteCat(id) {
+    const cat = S.categories(me.id).find((c) => c.id === id);
+    if (!cat) return;
+    const m = UI.modal(`
+      <h3>删除「${S.escapeHtml(cat.name)}」？</h3>
+      <p class="sub">这个分类下的 ${cat.count} 本书会回到「未分类」，书和笔记都不会丢。</p>
+      <div class="modal-foot">
+        <button class="btn" data-close>算了</button>
+        <button class="btn btn-primary" id="dcOk">删除分类</button>
+      </div>`);
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#dcOk').onclick = () => {
+      S.removeCategory(id);
+      if (activeCat === id) activeCat = 'all';
+      UI.closeModal(); refresh(); UI.toast('分类已删除，书已归入未分类');
+    };
+  }
+
+  document.querySelectorAll('[data-jump]').forEach((el) => {
+    el.onclick = () => {
+      const to = el.dataset.jump;
+      if (to === 'tavern') location.href = 'tavern.html';
+      else if (to === 'reading') location.href = 'reading.html';
+      else location.href = 'isbn.html';
+    };
+  });
+
+  /* ---------- 书架 ---------- */
+  function currentBooks() {
+    let list = S.books(me.id);
+    if (activeCat === 'none') list = list.filter((b) => !b.categoryId);
+    else if (activeCat !== 'all') list = list.filter((b) => b.categoryId === activeCat);
+    return list;
+  }
+
+  function renderStats() {
+    const books = S.books(me.id);
+    const notes = S.myNotes(me.id);
+    const cats = S.categories(me.id);
+    document.getElementById('greet').innerHTML =
+      `${S.escapeHtml(me.username)}的<em>酒架</em>`;
+    document.getElementById('statLine').innerHTML = `
+      <span><b>${books.length}</b>本书</span>
+      <span><b>${notes.length}</b>篇笔记</span>
+      <span><b>${notes.filter((n) => n.visibility === 'public' && n.status === 'published').length}</b>篇已分享</span>
+      <span><b>${cats.length}</b>个分类</span>`;
+  }
+
+  function renderBooks() {
+    const books = currentBooks();
+    const box = document.getElementById('shelfBody');
+    if (!books.length) {
+      box.innerHTML = `<div class="empty"><div class="ico">卅</div>
+        <p>这一格还空着。先添一本书，或者用 ISBN 把它请进来。</p>
+        <button class="btn btn-primary" id="emptyAdd">＋ 新建第一本书</button></div>`;
+      const b = document.getElementById('emptyAdd');
+      if (b) b.onclick = () => bookModal();
+      return;
+    }
+    box.innerHTML = `<div class="books-grid">${books.map((b) => {
+      const cat = S.categories(me.id).find((c) => c.id === b.categoryId);
+      return `<div class="book-item" data-id="${b.id}">
+        ${UI.coverHTML(b, { badge: b.noteCount ? b.noteCount + ' 篇' : '' })}
+        <span class="add-note" data-note="${b.id}" title="为这本书写笔记">＋</span>
+        <h3>${S.escapeHtml(b.title)}</h3>
+        <div class="meta"><span>${S.escapeHtml(b.author || '佚名')}</span>${cat ? `<span>·</span><span>${S.escapeHtml(cat.name)}</span>` : ''}</div>
+      </div>`;
+    }).join('')}</div>`;
+    box.querySelectorAll('.book-item').forEach((el) => {
+      el.onclick = (e) => {
+        const addBtn = e.target.closest('[data-note]');
+        if (addBtn) { e.stopPropagation(); noteModal(addBtn.dataset.note); return; }
+        location.href = 'book.html?id=' + el.dataset.id;
+      };
+    });
+  }
+
+  function refresh() { renderCats(); renderStats(); renderBooks(); }
+
+  /* ---------- 新建书籍 ---------- */
+  const ISBN_DB = {
+    '9787559817308': ['山月记', '中岛敦', '广西师范大学出版社'],
+    '9787108015309': ['我们仨', '杨绛', '生活·读书·新知三联书店'],
+    '9787101140749': ['万历十五年', '黄仁宇', '中华书局'],
+    '9787532582347': ['人间词话', '王国维', '上海古籍出版社'],
+    '9787101141906': ['陶庵梦忆', '张岱', '中华书局'],
+    '9787101144495': ['世说新语', '刘义庆', '中华书局'],
+    '9787020161504': ['夜航西飞', '柏瑞尔·马卡姆', '人民文学出版社'],
+    '9787532781780': ['月亮与六便士', '毛姆', '上海译文出版社'],
+    '9787532777262': ['寂静的春天', '蕾切尔·卡逊', '上海译文出版社'],
+    '9787532775268': ['枪炮、病菌与钢铁', '贾雷德·戴蒙德', '上海译文出版社'],
+    '9787108063218': ['美的历程', '李泽厚', '生活·读书·新知三联书店'],
+    '9787544292333': ['雪国', '川端康成', '南海出版公司'],
+    '9787506365437': ['活着', '余华', '作家出版社'],
+    '9787544253994': ['百年孤独', '加西亚·马尔克斯', '南海出版公司'],
+    '9787536692930': ['三体', '刘慈欣', '重庆出版社'],
+    '9787020090006': ['围城', '钱钟书', '人民文学出版社'],
+    '9787020002207': ['红楼梦', '曹雪芹', '人民文学出版社'],
+    '9787508647357': ['人类简史', '尤瓦尔·赫拉利', '中信出版社'],
+    '9787301184868': ['乡土中国', '费孝通', '北京大学出版社'],
+    '9787020042494': ['小王子', '圣埃克苏佩里', '人民文学出版社'],
+    '9787208061644': ['追风筝的人', '卡勒德·胡赛尼', '上海人民出版社'],
+    '9787544270878': ['解忧杂货店', '东野圭吾', '南海出版公司'],
+    '9787544258609': ['白夜行', '东野圭吾', '南海出版公司'],
+    '9787532766617': ['挪威的森林', '村上春树', '上海译文出版社'],
+    '9787020083190': ['我与地坛', '史铁生', '人民文学出版社'],
+    '9787108032911': ['目送', '龙应台', '生活·读书·新知三联书店'],
+    '9787544277259': ['撒哈拉的故事', '三毛', '南海出版公司'],
+    '9787530216781': ['平凡的世界', '路遥', '北京十月文艺出版社'],
+  };
+
+  async function fetchIsbn(isbn) {
+    // 1) 内置表
+    const local = ISBN_DB[isbn];
+    if (local) return { title: local[0], author: local[1], publisher: local[2] };
+
+    // 2) 本地补录 / 历史查询缓存（同一 ISBN 下次秒出）
+    try {
+      const cached = localStorage.getItem('sixi_isbn_' + isbn);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+
+    // 3) 可选：你自己的代理接口（config.js 里配 isbnApi）
+    const tpl = (window.SIXI_CONFIG || {}).isbnApi;
+    if (tpl) {
+      try {
+        const r = await fetch(tpl.replace('{isbn}', encodeURIComponent(isbn)),
+          { signal: AbortSignal.timeout(8000) });
+        if (r.ok) {
+          const j = await r.json();
+          if (j && j.title) {
+            const info = { title: j.title, author: j.author || '', publisher: j.publisher || '', cover: j.cover || '' };
+            try { localStorage.setItem('sixi_isbn_' + isbn, JSON.stringify(info)); } catch (e) {}
+            return info;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 4) OpenLibrary
+    try {
+      const r = await fetch('https://openlibrary.org/isbn/' + isbn + '.json',
+        { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.title) {
+          const info = {
+            title: j.title,
+            author: (j.by_statement || '').replace(/^by\s+/i, ''),
+            publisher: (j.publishers && j.publishers[0]) || '',
+          };
+          try { localStorage.setItem('sixi_isbn_' + isbn, JSON.stringify(info)); } catch (e) {}
+          return info;
+        }
+      }
+    } catch (e) {}
+
+    // 5) Google Books
+    try {
+      const r = await fetch('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn,
+        { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const j = await r.json();
+        const v = j.items && j.items[0] && j.items[0].volumeInfo;
+        if (v && v.title) {
+          const info = {
+            title: v.title,
+            author: (v.authors || []).join('、'),
+            publisher: v.publisher || '',
+          };
+          try { localStorage.setItem('sixi_isbn_' + isbn, JSON.stringify(info)); } catch (e) {}
+          return info;
+        }
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
+  function bookModal(prefill) {
+    prefill = prefill || {};
+    const cats = S.categories(me.id);
+    const m = UI.modal(`
+      <h3>添一本书</h3>
+      <p class="sub">封面可以自己导入，或自动线装书籍封面。</p>
+      <div class="field">
+        <label>ISBN（可选，用于同书聚合）</label>
+        <div class="word-row">
+          <input class="input" id="bkIsbn" placeholder="9787101141906" value="${prefill.isbn || ''}">
+          <button class="btn" id="lookupBtn" type="button">查书</button>
+        </div>
+        <span class="hint">输入 13 位 ISBN 后点「查书」，书名与出版社自动填入。</span>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>书名 *</label><input class="input" id="bkTitle" value="${prefill.title || ''}"></div>
+        <div class="field"><label>作者</label><input class="input" id="bkAuthor" value="${prefill.author || ''}"></div>
+      </div>
+      <div class="field"><label>出版社</label><input class="input" id="bkPub" value="${prefill.publisher || ''}"></div>
+      <div class="grid-2">
+        <div class="field"><label>分类</label>
+          <select class="select" id="bkCat">
+            <option value="">未分类</option>
+            ${cats.map((c) => `<option value="${c.id}">${S.escapeHtml(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>封面（可选）</label>
+          <label class="btn btn-sm" style="height:44px;justify-content:flex-start;padding:0 12px;overflow:hidden">
+            <span id="coverName">选择图片…</span>
+            <input type="file" id="bkCover" accept="image/*" hidden>
+          </label>
+          <div id="coverPreview" style="margin-top:8px;display:none">
+            <img alt="封面预览" style="width:52px;height:69px;object-fit:cover;border-radius:3px;box-shadow:var(--shadow-s)">
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="bkSave">放入酒架</button>
+      </div>`, { wide: true });
+
+    let coverData = null;
+    const showCoverPreview = (src) => {
+      const box = m.querySelector('#coverPreview');
+      if (!box) return;
+      box.style.display = 'block';
+      box.querySelector('img').src = src;
+    };
+
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#bkCover').onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      resizeImage(f, 600, (data) => {
+        coverData = data;
+        m.querySelector('#coverName').textContent = '已选择：' + f.name.slice(0, 12);
+        showCoverPreview(data);
+      });
+    };
+
+    m.querySelector('#lookupBtn').onclick = async () => {
+      const isbn = m.querySelector('#bkIsbn').value.replace(/[^0-9Xx]/g, '');
+      if (isbn.length !== 13 && isbn.length !== 10) { UI.toast('ISBN 一般是 13 位数字'); return; }
+      const btn = m.querySelector('#lookupBtn');
+      btn.textContent = '查询中';
+      const info = await fetchIsbn(isbn);
+      btn.textContent = '查书';
+      if (!info || !info.title) {
+        UI.toast('三个书库都没查到，请手动填写书名与出版社');
+        m.querySelector('#bkTitle').focus();
+        return;
+      }
+      m.querySelector('#bkTitle').value = info.title;
+      m.querySelector('#bkAuthor').value = info.author || '';
+      m.querySelector('#bkPub').value = info.publisher || '';
+      UI.toast('已填入书名与出版社，正在找封面…');
+
+      const coverUrl = 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg?default=false';
+      try {
+        const cr = await fetch(coverUrl, { mode: 'cors' });
+        if (cr.ok) {
+          const blob = await cr.blob();
+          coverData = await new Promise((res) => {
+            const fr = new FileReader();
+            fr.onload = () => res(fr.result);
+            fr.readAsDataURL(blob);
+          });
+          showCoverPreview(coverData);
+          UI.toast('封面已找到');
+        } else {
+          UI.toast('没找到封面，将自动生成线装书封面');
+        }
+      } catch (e) {
+        UI.toast('封面没取到，将自动生成线装书封面');
+      }
+    };
+
+    m.querySelector('#bkSave').onclick = () => {
+      const title = m.querySelector('#bkTitle').value.trim();
+      if (!title) { UI.toast('书名不能为空'); return; }
+      if ((m.querySelector('#bkIsbn').value || '').replace(/[^0-9Xx]/g, '')) {
+        try {
+          localStorage.setItem('sixi_isbn_' + m.querySelector('#bkIsbn').value.replace(/[^0-9Xx]/g, ''),
+            JSON.stringify({
+              title,
+              author: m.querySelector('#bkAuthor').value.trim(),
+              publisher: m.querySelector('#bkPub').value.trim(),
+            }));
+        } catch (e) {}
+      }
+      const b = S.addBook({
+        title,
+        author: m.querySelector('#bkAuthor').value.trim(),
+        publisher: m.querySelector('#bkPub').value.trim(),
+        isbn: m.querySelector('#bkIsbn').value,
+        categoryId: m.querySelector('#bkCat').value || null,
+        cover: coverData,
+      });
+      UI.closeModal(); refresh(); UI.toast('已放入酒架');
+    };
+  }
+
+  function resizeImage(file, maxW, cb) {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      cb(c.toDataURL('image/jpeg', 0.82));
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }
+
+  /* ---------- 写笔记 ---------- */
+  function noteModal(bookId) {
+    const books = S.books(me.id);
+    if (!books.length) { UI.toast('先添一本书吧'); bookModal(); return; }
+    const m = UI.modal(`
+      <h3>写一篇读书笔记</h3>
+      <p class="sub">写下此刻想到的，回头还能改。</p>
+      <div class="field"><label>属于哪本书</label>
+        <select class="select" id="ntBook">
+          ${books.map((b) => `<option value="${b.id}" ${b.id === bookId ? 'selected' : ''}>${S.escapeHtml(b.title)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>标题</label><input class="input" id="ntTitle" placeholder="给这篇笔记起个名字"></div>
+      <div class="field"><label>页码 <span class="hint">（选填）</span></label><input class="input" id="ntPage" placeholder="读到第几页，如 42"></div>
+      <div class="field"><label>正文</label>
+        <textarea class="textarea" id="ntBody" style="min-height:200px" placeholder="读到什么，想到什么。每段一行，段首会自动缩进两个字。"></textarea>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>谁可以看</label>
+          <select class="select" id="ntVis">
+            <option value="public">所有人可见（会出现在酒肆）</option>
+            <option value="followers">仅关注者可见</option>
+            <option value="private">仅自己可见</option>
+          </select>
+        </div>
+        <div class="field"><label>标签（逗号分隔）</label><input class="input" id="ntTags" placeholder="如：历史, 制度"></div>
+      </div>
+      <label class="checkline"><input type="checkbox" id="ntAnon"> 匿名分享（不显示我的名字）</label>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn" id="ntDraft">存草稿</button>
+        <button class="btn btn-primary" id="ntSave">发布</button>
+      </div>`, { wide: true });
+
+    m.querySelector('#ntDraft').onclick = () => {
+      const title = m.querySelector('#ntTitle').value.trim();
+      const body = m.querySelector('#ntBody').value.trim();
+      if (!title && !body) { UI.toast('还什么都没写'); return; }
+      S.addNote({
+        bookId: m.querySelector('#ntBook').value,
+        title: title || '未命名草稿',
+        content: body,
+        page: m.querySelector('#ntPage').value.trim(),
+        visibility: m.querySelector('#ntVis').value,
+        anonymous: m.querySelector('#ntAnon').checked,
+        tags: m.querySelector('#ntTags').value.split(/[,，\s]+/).filter(Boolean),
+      }, { draft: true });
+      UI.closeModal(); refresh(); UI.toast('已存草稿，只有你自己看得见');
+    };
+    m.querySelector('#ntSave').onclick = () => {
+      const title = m.querySelector('#ntTitle').value.trim();
+      const body = m.querySelector('#ntBody').value.trim();
+      if (!title) { UI.toast('还差一个标题'); return; }
+      if (body.length < 10) { UI.toast('正文太短了，多写两句'); return; }
+      const r = S.addNote({
+        bookId: m.querySelector('#ntBook').value,
+        title, content: body,
+        page: m.querySelector('#ntPage').value.trim(),
+        visibility: m.querySelector('#ntVis').value,
+        anonymous: m.querySelector('#ntAnon').checked,
+        tags: m.querySelector('#ntTags').value.split(/[,，\s]+/).filter(Boolean),
+      });
+      if (r.error) { UI.toast(r.error); return; }
+      UI.closeModal(); refresh();
+      if (r.hits.length) {
+        UI.toast('这段文字暂时发不出去，换个说法试试');
+      } else {
+        UI.toast('已发布');
+        setTimeout(refresh, 900);
+      }
+    };
+  }
+
+  /* ---------- ISBN 导入 ---------- */
+  document.getElementById('isbnBtn').onclick = () => {
+    const m = UI.modal(`
+      <h3>按 ISBN 请一本书进来</h3>
+      <p class="sub">同一 ISBN 的笔记，将来会被聚合到同一页，按点赞量排序。</p>
+      <div class="field"><label>ISBN</label>
+        <input class="input" id="qIsbn" placeholder="9787101141906" autofocus>
+        <span class="hint">书背条码下方那串数字，13 位（旧书可能 10 位）。</span>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="qGo">查询</button>
+      </div>`);
+    const go = async () => {
+      const isbn = m.querySelector('#qIsbn').value.replace(/[^0-9Xx]/g, '');
+      if (isbn.length < 10) { UI.toast('ISBN 一般是 10 或 13 位'); return; }
+      const btn = m.querySelector('#qGo');
+      btn.textContent = '查询中';
+      const info = await fetchIsbn(isbn);
+      UI.closeModal();
+      if (info && info.title) {
+        bookModal({ isbn, title: info.title, author: info.author, publisher: info.publisher });
+      } else {
+        UI.toast('没查到这本书，先手动填一下');
+        bookModal({ isbn });
+      }
+    };
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#qGo').onclick = go;
+    m.querySelector('#qIsbn').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  };
+
+  /* ---------- 新建分类 ---------- */
+  document.getElementById('addCatBtn').onclick = () => {
+    const m = UI.modal(`
+      <h3>新建分类</h3>
+      <p class="sub">随你命名：朝代、体裁、心情都可以。</p>
+      <div class="field"><label>分类名</label><input class="input" id="catName" placeholder="如：明清笔记"></div>
+      <div class="modal-foot">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="catSave">建好了</button>
+      </div>`);
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#catSave').onclick = () => {
+      const n = m.querySelector('#catName').value.trim();
+      if (!n) return;
+      S.addCategory(n); UI.closeModal(); refresh(); UI.toast('新分类已建');
+    };
+  };
+
+  document.getElementById('addBookBtn').onclick = () => bookModal();
+  document.getElementById('writeBtn').onclick = () => noteModal();
+
+  refresh();
+  if (new URLSearchParams(location.search).get('filter') === 'private') {
+    activeCat = 'all';
+  }
+})();
+</script>
+</body>
+</html>

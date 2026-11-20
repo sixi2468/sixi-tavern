@@ -1,0 +1,11 @@
+# ads.txt —— 广告系统用来确认"谁有权卖这个站的广告"
+#
+# 用 Google AdSense 时：
+#   1) 在 AdSense 后台 → 网站 → 找到你的发布商 ID（pub-0000000000000000）
+#   2) 把下面这行的 pub-XXXX 换成你的 ID，删掉开头的 #
+#   3) 上传到站点根目录（与 index.html 同级），访问 https://你的域名/ads.txt 能打开即可
+#
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+#
+# 用其他联盟时，按其后台提供的 ads.txt 内容替换即可。
+# 没有接 AdSense 时，保留本文件（只有注释）也不会影响网站。

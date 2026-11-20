@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>书 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="note-wrap">
+    <section id="bookMain"></section>
+    <aside id="bookSide"></aside>
+  </div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 读书笔记</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('shelf');
+
+  const id = UI.param('id');
+  let book = id ? S.book(id) : null;
+  if (!book) {
+    document.getElementById('bookMain').innerHTML = '<div class="empty">这本书不在架上。</div>';
+    return;
+  }
+  const mine = book.userId === me.id;
+  let sortMode = 'time';
+
+  function render() {
+    book = S.book(id);
+    let notes = S.notesOfBook(id);
+    if (sortMode === 'page') {
+      notes = notes.slice().sort((a, b) => {
+        const pa = parseFloat(String(a.page || '').split('-')[0]);
+        const pb = parseFloat(String(b.page || '').split('-')[0]);
+        const va = isNaN(pa) ? Infinity : pa;
+        const vb = isNaN(pb) ? Infinity : pb;
+        return va === vb ? b.createdAt - a.createdAt : va - vb;
+      });
+    }
+    const cat = S.categories(book.userId).find((c) => c.id === book.categoryId);
+    const sameIsbn = book.isbn ? S.booksByIsbn(book.isbn).filter((b) => b.id !== book.id) : [];
+
+    document.getElementById('bookMain').innerHTML = `
+      <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;margin-bottom:30px">
+        <div style="width:150px;flex:none">${UI.coverHTML(book)}</div>
+        <div style="flex:1;min-width:220px">
+          <h1 class="greet" style="font-size:28px;margin:0 0 8px">${S.escapeHtml(book.title)}</h1>
+          <p class="muted" style="margin:0 0 4px">${S.escapeHtml(book.author || '佚名')}</p>
+          <p class="small muted" style="margin:0 0 14px">${S.escapeHtml(book.publisher || '出版社未填')}${book.isbn ? ' · ISBN ' + book.isbn : ''}</p>
+          <div class="tag-row" style="margin:0 0 16px">
+            ${cat ? `<span class="chip on">${S.escapeHtml(cat.name)}</span>` : '<span class="chip">未分类</span>'}
+            <span class="chip">${notes.length} 篇笔记</span>
+            ${book.isbn ? `<a class="chip" href="isbn.html?isbn=${book.isbn}">同 ISBN 另有 ${sameIsbn.length} 本</a>` : ''}
+          </div>
+          ${mine ? `<div class="toolbar">
+            <button class="btn btn-primary" id="writeHere">为这本书写笔记</button>
+            <button class="btn" id="editCover">更换封面</button>
+            <button class="btn" id="editInfo">编辑信息</button>
+          </div>` : ''}
+        </div>
+      </div>
+
+      <div class="section-head" style="align-items:center">
+        <h2>这本书的笔记</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="small muted">共 ${notes.length} 篇</span>
+          <span class="chip ${sortMode === 'time' ? 'on' : ''}" data-sort="time">按发布时间</span>
+          <span class="chip ${sortMode === 'page' ? 'on' : ''}" data-sort="page">按页码</span>
+        </div>
+      </div>
+      <div id="notesBox"></div>`;
+
+    const box = document.getElementById('notesBox');
+    if (!notes.length) {
+      box.innerHTML = `<div class="empty"><div class="ico">卷</div><p>还没有为这本书写下什么。</p>
+        ${mine ? '<button class="btn btn-primary" id="writeEmpty">写第一篇</button>' : ''}</div>`;
+      const w = document.getElementById('writeEmpty');
+      if (w) w.onclick = () => (location.href = 'write.html?book=' + id);
+    } else {
+      box.innerHTML = notes.map((n) => `
+        <a class="card" href="note.html?id=${n.id}" style="display:block;padding:18px 20px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start">
+            <h3 style="font-family:var(--serif);font-size:17px;margin:0 0 6px;font-weight:600">${S.escapeHtml(n.title)}</h3>
+            <div style="display:flex;gap:6px;flex:none">
+              ${UI.statusBadge(n.status)}
+              <span class="badge ${n.visibility === 'public' ? 'badge-public' : n.visibility === 'followers' ? 'badge-followers' : 'badge-private'}">${UI.visibilityLabel(n.visibility)}</span>
+            </div>
+          </div>
+          <p class="small muted" style="margin:0 0 8px">${S.escapeHtml(n.content.replace(/\n/g, ' ').slice(0, 100))}…</p>
+          <div class="small muted">${n.page ? '第 ' + S.escapeHtml(n.page) + ' 页 · ' : ''}${S.fmtTime(n.createdAt)} · ♡ ${n.likeCount} · 评 ${n.commentCount} · 赏 ${n.tipped || 0}</div>
+        </a>`).join('');
+    }
+
+    document.getElementById('bookSide').innerHTML = `
+      <div class="side-card">
+        <h3>关于这本书</h3>
+        <p class="small" style="margin:0 0 10px;color:var(--ink-2)">ISBN 相同的书会被视作同一本书，所有相关笔记会聚合在一页，按点赞量排序。</p>
+        ${book.isbn ? `<a class="btn btn-sm" style="width:100%" href="isbn.html?isbn=${book.isbn}">看同一本书的所有笔记</a>` : ''}
+      </div>
+      <div class="side-card">
+        <h3>操作提示</h3>
+        <p class="small muted" style="margin:0;line-height:1.9">
+          · 点击「更换封面」可导入自己的图，建议竖版 3:4。<br>
+          · 不导入封面时，系统会生成一册明清线装书样式，书名以毛笔体竖排书写。<br>
+          · 笔记的可见范围可分为：所有人 / 关注者 / 仅自己。
+        </p>
+      </div>`;
+
+    document.querySelectorAll('[data-sort]').forEach((el) => {
+      el.onclick = () => { sortMode = el.dataset.sort; render(); };
+    });
+
+    if (mine) {
+      document.getElementById('writeHere').onclick = () => {
+        location.href = 'write.html?book=' + id;
+      };
+      document.getElementById('editCover').onclick = () => {
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = 'image/*';
+        inp.onchange = () => {
+          const f = inp.files[0]; if (!f) return;
+          const img = new Image(); const url = URL.createObjectURL(f);
+          img.onload = () => {
+            const scale = Math.min(1, 700 / img.width);
+            const c = document.createElement('canvas');
+            c.width = img.width * scale; c.height = img.height * scale;
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            S.updateBook(id, { cover: c.toDataURL('image/jpeg', 0.82) });
+            URL.revokeObjectURL(url); render(); UI.toast('封面已换');
+          };
+          img.src = url;
+        };
+        inp.click();
+      };
+      document.getElementById('editInfo').onclick = () => {
+        const m = UI.modal(`
+          <h3>编辑书籍信息</h3>
+          <div class="field"><label>书名</label><input class="input" id="eT" value="${S.escapeHtml(book.title)}"></div>
+          <div class="field"><label>作者</label><input class="input" id="eA" value="${S.escapeHtml(book.author || '')}"></div>
+          <div class="field"><label>出版社</label><input class="input" id="eP" value="${S.escapeHtml(book.publisher || '')}"></div>
+          <div class="field"><label>ISBN</label><input class="input" id="eI" value="${S.escapeHtml(book.isbn || '')}"></div>
+          <div class="modal-foot">
+            <button class="btn" data-close>取消</button>
+            <button class="btn btn-primary" id="eSave">保存</button>
+          </div>`);
+        m.querySelector('[data-close]').onclick = UI.closeModal;
+        m.querySelector('#eSave').onclick = () => {
+          S.updateBook(id, {
+            title: m.querySelector('#eT').value.trim() || book.title,
+            author: m.querySelector('#eA').value.trim(),
+            publisher: m.querySelector('#eP').value.trim(),
+            isbn: m.querySelector('#eI').value.replace(/[^0-9Xx]/g, ''),
+          });
+          UI.closeModal(); render(); UI.toast('已保存');
+        };
+      };
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

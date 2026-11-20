@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后台 · 四夕酒馆</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div id="adminBody"></div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 后台（仅馆主可见）</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('admin');
+
+  const body = document.getElementById('adminBody');
+  const isOwner = me.role === 'owner' || me.role === 'admin';
+
+  if (!isOwner) {
+    body.innerHTML = `
+      <div class="gate card" style="padding:40px">
+        <div style="font-family:var(--serif);font-size:34px;color:var(--cinnabar)">闲人免进</div>
+        <p class="muted" style="margin:14px 0 22px">这里是馆主的账房，只对一个人开门。</p>
+        
+      </div>`;
+    return;
+  }
+
+  const st = S.stats();
+
+  function lineChart(days) {
+    const W = 620, H = 190, pad = 34;
+    const max = Math.max(...days.map((d) => d.v), 5);
+    const stepX = (W - pad * 2) / (days.length - 1);
+    const pts = days.map((d, i) => [pad + i * stepX, H - pad - (d.v / max) * (H - pad * 2)]);
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const area = line + ` L ${pts[pts.length - 1][0]} ${H - pad} L ${pad} ${H - pad} Z`;
+    const grid = [0, .25, .5, .75, 1].map((k) => {
+      const y = H - pad - k * (H - pad * 2);
+      return `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="rgba(58,48,38,.08)"/>
+              <text x="${pad - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#8b8073">${Math.round(max * k)}</text>`;
+    }).join('');
+    const dots = pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" fill="#a33a2f"/>`).join('');
+    const labels = days.map((d, i) => `<text x="${pad + i * stepX}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#8b8073">${d.label}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+      <defs><linearGradient id="areaG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#a33a2f" stop-opacity=".18"/>
+        <stop offset="100%" stop-color="#a33a2f" stop-opacity="0"/>
+      </linearGradient></defs>
+      ${grid}
+      <path d="${area}" fill="url(#areaG)"/>
+      <path d="${line}" fill="none" stroke="#a33a2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}${labels}
+    </svg>`;
+  }
+
+  function barChart(items) {
+    const W = 620, H = 190, pad = 34, bw = 26;
+    const max = Math.max(...items.map((i) => i.v), 1);
+    const gap = (W - pad * 2) / items.length;
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+      ${items.map((it, i) => {
+        const h = (it.v / max) * (H - pad * 2);
+        const x = pad + i * gap + gap / 2 - bw / 2;
+        return `<rect x="${x}" y="${H - pad - h}" width="${bw}" height="${h}" rx="3" fill="rgba(78,107,96,${.35 + i * .09})"/>
+          <text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" font-size="10" fill="#4e6b60">${it.v}</text>
+          <text x="${x + bw / 2}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#8b8073">${it.label}</text>`;
+      }).join('')}
+    </svg>`;
+  }
+
+  function render() {
+    const s = S.stats();
+    const pendingNotes = S.load().notes.filter((n) => n.status === 'pending');
+    const pendingComments = S.load().comments.filter((c) => c.status === 'pending');
+    const fbs = S.feedbackList();
+
+    body.innerHTML = `
+      <div class="section-head">
+        <div><h2>账房</h2><div class="sub">只有馆主能看到这些数。演示数据由本机访问记录生成。</div></div>
+        <span class="small muted">更新于 ${new Date().toLocaleString('zh-CN')}</span>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric"><div class="k">注册用户</div><div class="v">${s.users}<small>人</small></div><div class="d">较上周 +8</div></div>
+        <div class="metric"><div class="k">今日活跃（DAU）</div><div class="v">${s.dau}<small>人</small></div><div class="d">${s.users ? ((s.dau / s.users) * 100).toFixed(0) : 0}% 回访率</div></div>
+        <div class="metric"><div class="k">月活跃（MAU）</div><div class="v">${s.mau}<small>人</small></div><div class="d">近 30 天</div></div>
+        <div class="metric"><div class="k">平均停留</div><div class="v">${s.avgStay}<small>分钟</small></div><div class="d">单次阅读时长</div></div>
+        <div class="metric"><div class="k">已发布笔记</div><div class="v">${s.notes}<small>篇</small></div><div class="d">评论 ${s.comments} 条</div></div>
+        <div class="metric"><div class="k">待审核</div><div class="v">${s.pending + pendingComments.length}<small>条</small></div><div class="d ${s.pending ? 'down' : ''}">需要你过目</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;margin-bottom:22px" id="charts">
+        <div class="chart-card"><h3>近 7 日活跃用户</h3>${lineChart(s.days)}
+          <div class="chart-legend"><span><i style="background:#a33a2f"></i>日活用户数</span></div></div>
+        <div class="chart-card"><h3>阅读时长分布（人次）</h3>
+          ${barChart([{ label: '＜2 分', v: 8 }, { label: '2-5 分', v: 17 }, { label: '5-15 分', v: 24 }, { label: '15-30 分', v: 11 }, { label: '＞30 分', v: 5 }])}
+          <div class="chart-legend"><span><i style="background:#4e6b60"></i>按会话时长分桶</span></div>
+        </div>
+      </div>
+
+      <section class="panel">
+        <h2>审核队列</h2>
+        <p class="desc">命中屏蔽词的内容会留在这里；通过后立即出现在酒肆，驳回则退回作者。</p>
+        <div id="reviewList"></div>
+      </section>
+
+      <section class="panel">
+        <h2>驿站来信</h2>
+        <p class="desc">用户在右上角「驿站」提交的建议、举报与问题。</p>
+        <div id="fbList"></div>
+      </section>
+
+      <section class="panel">
+        <h2>广告位</h2>
+        <p class="desc">把广告联盟提供的代码粘进来即可生效。建议首次接入先用「酒肆信息流」一处，观察收益与体验的平衡。</p>
+        <div id="adList"></div>
+      </section>`;
+
+    /* 审核 */
+    const rl = document.getElementById('reviewList');
+    const rows = [];
+    pendingNotes.forEach((n) => {
+      const b = S.book(n.bookId);
+      rows.push(`<div class="review-row">
+        <div class="c-main">
+          <b>笔记 · ${S.escapeHtml(n.title)}</b>
+          <span class="badge badge-anon" style="margin-left:6px">${n.anonymous ? '匿名' : '实名'}</span>
+          <p>《${S.escapeHtml(b ? b.title : '')}》｜${highlight(n.content.slice(0, 160))}</p>
+        </div>
+        <div class="ops">
+          <button class="btn btn-sm" data-pass="${n.id}">通过</button>
+          <button class="btn btn-sm" data-reject="${n.id}" style="color:var(--cinnabar)">驳回</button>
+        </div>
+      </div>`);
+    });
+    pendingComments.forEach((c) => {
+      rows.push(`<div class="review-row">
+        <div class="c-main">
+          <b>评论 · ${S.escapeHtml(c.content.slice(0, 40))}</b>
+          <span class="badge badge-anon" style="margin-left:6px">${c.anonymous ? '匿名' : '实名'}</span>
+          <p>${highlight(c.content)}</p>
+        </div>
+        <div class="ops">
+          <button class="btn btn-sm" data-cpass="${c.id}">通过</button>
+          <button class="btn btn-sm" data-creject="${c.id}" style="color:var(--cinnabar)">驳回</button>
+        </div>
+      </div>`);
+    });
+    rl.innerHTML = rows.length ? rows.join('') : '<div class="empty" style="padding:26px"><p>队列是空的，今天可以歇一歇。</p></div>';
+
+    function bindReview() {
+      rl.querySelectorAll('[data-pass]').forEach((b) => b.onclick = () => {
+        S.setNoteStatus(b.dataset.pass, 'published'); render(); UI.toast('已通过');
+      });
+      rl.querySelectorAll('[data-reject]').forEach((b) => b.onclick = () => {
+        S.setNoteStatus(b.dataset.reject, 'rejected'); render(); UI.toast('已驳回');
+      });
+      rl.querySelectorAll('[data-cpass]').forEach((b) => b.onclick = () => {
+        const c = S.load().comments.find((x) => x.id === b.dataset.cpass);
+        c.status = 'published'; S.save(); render(); UI.toast('已通过');
+      });
+      rl.querySelectorAll('[data-creject]').forEach((b) => b.onclick = () => {
+        const d = S.load();
+        d.comments = d.comments.filter((x) => x.id !== b.dataset.creject); S.save(); render(); UI.toast('已删除');
+      });
+    }
+    bindReview();
+
+    /* 反馈 */
+    const fl = document.getElementById('fbList');
+    fl.innerHTML = fbs.length ? fbs.map((f) => `<div class="review-row">
+        <div class="c-main">
+          <b>${S.escapeHtml(f.username)} · ${S.escapeHtml(f.type)}</b>
+          <span class="c-time" style="margin-left:8px">${S.fmtTime(f.ts)}</span>
+          <p>${S.escapeHtml(f.content)}</p>
+        </div>
+      </div>`).join('') : '<div class="empty" style="padding:26px"><p>还没有来信。</p></div>';
+
+    /* 广告位 */
+    const al = document.getElementById('adList');
+    const slots = S.load().adSlots || [];
+    al.innerHTML = slots.map((sl, i) => `<div class="review-row" style="align-items:center">
+        <div class="c-main">
+          <b>${S.escapeHtml(sl.name)}</b>
+          <span class="small muted" style="margin-left:8px">${sl.id}</span>
+          <p class="small muted" style="margin:4px 0 0">状态：${sl.enabled ? '已启用' : '已停用'}${sl.code ? ' · 已填入代码' : ' · 未填代码'}</p>
+        </div>
+        <div class="ops">
+          <button class="btn btn-sm" data-ad="${i}">配置</button>
+        </div>
+      </div>`).join('');
+
+    al.querySelectorAll('[data-ad]').forEach((b) => b.onclick = () => {
+      const sl = S.load().adSlots[+b.dataset.ad];
+      const m = UI.modal(`
+        <h3>配置广告位</h3>
+        <p class="sub">${S.escapeHtml(sl.name)} · ${sl.id}</p>
+        <div class="field"><label>广告联盟代码 / 脚本</label>
+          <textarea class="textarea" id="adCode" placeholder="粘贴联盟后台给的 &lt;script&gt; 或 &lt;ins&gt; 代码">${S.escapeHtml(sl.code || '')}</textarea>
+        </div>
+        <label class="checkline"><input type="checkbox" id="adOn" ${sl.enabled ? 'checked' : ''}> 启用这个广告位</label>
+        <div class="modal-foot">
+          <button class="btn" data-close>取消</button>
+          <button class="btn btn-primary" id="adSave">保存</button>
+        </div>`);
+      m.querySelector('[data-close]').onclick = UI.closeModal;
+      m.querySelector('#adSave').onclick = () => {
+        sl.code = m.querySelector('#adCode').value;
+        sl.enabled = m.querySelector('#adOn').checked;
+        S.save(); UI.closeModal(); render(); UI.toast('广告位已保存');
+      };
+    });
+
+    function highlight(text) {
+      const words = S.blockedWords();
+      let out = S.escapeHtml(text);
+      words.forEach((w) => {
+        if (!w) return;
+        const re = new RegExp(S.escapeHtml(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        out = out.replace(re, (m) => `<span class="hit">${m}</span>`);
+      });
+      return out;
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

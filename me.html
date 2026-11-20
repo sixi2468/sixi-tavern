@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人中心 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="note-wrap">
+    <section>
+      <div class="card" style="padding:28px 30px;display:flex;gap:22px;align-items:center;flex-wrap:wrap;
+           background:linear-gradient(120deg,rgba(255,253,248,.96),rgba(248,240,224,.86))">
+        <div class="profile-ava" id="bigAva">沈</div>
+        <div style="flex:1;min-width:200px">
+          <h1 id="meName" style="font-family:var(--serif);font-size:26px;margin:0 0 6px;letter-spacing:.06em"></h1>
+          <p class="muted" id="meSign" style="margin:0 0 10px;font-size:13.5px"></p>
+          <div class="small muted" id="meMeta"></div>
+        </div>
+        <div class="toolbar">
+          <a class="btn btn-sm" href="reading.html">阅读小结</a>
+          <a class="btn btn-sm" href="settings.html">编辑资料</a>
+          <button class="btn btn-sm" id="logoutBtn" style="color:var(--cinnabar)">退出登录</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px;padding:26px 28px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
+          <div>
+            <p class="small muted" style="letter-spacing:.2em;margin:0 0 6px">我的酒</p>
+            <div style="font-family:var(--serif);font-size:44px;line-height:1;color:var(--cinnabar)" id="wineBalance">0</div>
+            <p class="small muted" style="margin:8px 0 0" id="wineHint"></p>
+          </div>
+          <div style="text-align:right">
+            <div class="small muted">累计收入</div>
+            <div style="font-family:var(--serif);font-size:20px" id="wineIn">+0</div>
+            <div class="small muted" style="margin-top:8px">累计支出</div>
+            <div style="font-family:var(--serif);font-size:20px" id="wineOut">-0</div>
+          </div>
+        </div>
+        <div class="divider-or" style="margin:20px 0 14px">收支明细</div>
+        <div id="ledger"></div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="side-card">
+        <h3>我在酒馆</h3>
+        <div id="meStats" class="small" style="line-height:2.2;color:var(--ink-2)"></div>
+      </div>
+      <div class="side-card">
+        <h3>最近写的</h3>
+        <div id="recentNotes"></div>
+      </div>
+      <div class="side-card">
+        <h3>酒的来路</h3>
+        <p class="small muted" style="margin:0;line-height:2">
+          每日登录赠 3 壶；<br>
+          当赏一篇用 1 壶；<br>
+          你被赏满 5 壶，折算 1 壶进余额。
+        </p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 个人中心</footer>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('me');
+
+  // 进页面也补一次（跨天刷新即到账）
+  S.grantDaily(me.id);
+
+  const w = S.wallet();
+  const notes = S.myNotes(me.id);
+  const books = S.books(me.id);
+  const following = S.followingIds().length;
+
+  document.getElementById('logoutBtn').onclick = () => {
+    S.logout();
+    location.href = 'index.html';
+  };
+
+  document.getElementById('bigAva').textContent = me.username.slice(0, 1);
+  document.getElementById('meName').textContent = me.username;
+  document.getElementById('meSign').textContent = me.signature || '还没写签名。';
+  document.getElementById('meMeta').innerHTML =
+    `加入于 ${new Date(me.createdAt).toLocaleDateString('zh-CN')}　·　关注 ${following} 人`;
+
+  document.getElementById('wineBalance').textContent = w.balance;
+  document.getElementById('wineHint').textContent = w.todayGranted
+    ? `今日的 ${w.daily} 壶已到账`
+    : `今天还没领，刷新即可到账 ${w.daily} 壶`;
+
+  const income = w.ledger.filter((x) => x.amount > 0).reduce((a, x) => a + x.amount, 0);
+  const outcome = Math.abs(w.ledger.filter((x) => x.amount < 0).reduce((a, x) => a + x.amount, 0));
+  document.getElementById('wineIn').textContent = '+' + income;
+  document.getElementById('wineOut').textContent = outcome ? '-' + outcome : '0';
+
+  document.getElementById('ledger').innerHTML = w.ledger.length
+    ? w.ledger.slice(0, 30).map((x) => `
+        <div class="review-row" style="align-items:center">
+          <div class="c-main">
+            <b>${S.escapeHtml(x.desc)}</b>
+            <span class="c-time" style="margin-left:8px">${S.fmtTime(x.ts)}</span>
+          </div>
+          <div style="font-family:var(--serif);font-size:18px;color:${x.amount > 0 ? 'var(--jade)' : 'var(--cinnabar)'}">
+            ${x.amount > 0 ? '+' : ''}${x.amount} 壶
+          </div>
+        </div>`).join('')
+    : '<div class="empty" style="padding:24px"><p>还没有记录。今天登录已经送了你 3 壶。</p></div>';
+
+  document.getElementById('meStats').innerHTML = `
+    藏书 <b>${books.length}</b> 本<br>
+    笔记 <b>${notes.length}</b> 篇（公开 ${notes.filter((n) => n.visibility === 'public' && n.status === 'published').length} 篇）<br>
+    获赞 <b>${notes.reduce((a, n) => a + (n.likeCount || 0), 0)}</b> 个<br>
+    被赏 <b>${notes.reduce((a, n) => a + (n.tipped || 0), 0)}</b> 壶`;
+
+  document.getElementById('recentNotes').innerHTML = notes.slice(0, 5).map((n) => `
+    <a class="mini-note" href="note.html?id=${n.id}">${S.escapeHtml(n.title)}
+      <em>《${S.escapeHtml(n.book ? n.book.title : '')}》 · ${S.fmtTime(n.createdAt)}</em></a>`).join('')
+    || '<p class="small muted">还没有笔记。</p>';
+})();
+</script>
+</body>
+</html>

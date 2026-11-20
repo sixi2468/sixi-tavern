@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>酒肆 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="tavern-hero">
+    <div>
+      <h1>酒肆</h1>
+      <p>过路的人把读过的书摊在案上，你尽可坐下翻一翻。</p>
+    </div>
+    <div class="search-box">
+      <input id="q" type="search" placeholder="搜书名、作者、ISBN 或笔记里的字…">
+      <button class="btn btn-primary btn-sm" id="qBtn">寻</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <span class="chip on" data-sort="new">最新</span>
+    <span class="chip" data-sort="hot">最热</span>
+    <span class="chip" data-scope="follow">只看关注</span>
+    <span class="small muted" id="resultHint" style="margin-left:auto"></span>
+  </div>
+
+  <div id="isbnBanner"></div>
+  <div class="feed-grid" id="feed"></div>
+  <div class="load-more" id="sentinel"><span class="small muted">继续下滑，还有酒</span></div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 酒肆 —— 坐一会儿，慢慢翻</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  UI.requireAuth();
+  UI.header('tavern');
+
+  const feedEl = document.getElementById('feed');
+  const sentinel = document.getElementById('sentinel');
+  const hint = document.getElementById('resultHint');
+  let state = { page: 0, size: 8, q: '', sort: 'new', scope: 'all', loading: false, done: false };
+
+  function cardHTML(n) {
+    const anon = n.anonymous;
+    const name = anon ? '无名酒客' : (n.author ? n.author.username : '佚名');
+    const [c1, c2] = S.colorPair(n.book ? n.book.color : 0);
+    const ch = (n.book && n.book.title ? n.book.title.slice(0, 1) : '书');
+    return `<article class="note-card" data-id="${n.id}">
+      <div class="thumb" data-ch="${S.escapeHtml(ch)}">
+        <div class="thumb-bg" style="background:linear-gradient(150deg,${c1},${c2})"></div>
+        ${UI.coverHTML(n.book || { title: '', color: 0 }, { cls: 'mini-cover' })}
+      </div>
+      <div class="body">
+        <h3>${S.escapeHtml(n.title)}</h3>
+        <div class="bookline">《${S.escapeHtml(n.book ? n.book.title : '佚名之书')}》 · ${S.escapeHtml(n.book ? (n.book.author || '') : '')}</div>
+        <p class="excerpt">${S.escapeHtml(S.excerpt(n.content, 90))}…</p>
+        <div class="foot">
+          <span class="who">
+            <span class="ava" style="${anon ? 'background:linear-gradient(145deg,#9fb0a8,#6f8379)' : ''}">${S.escapeHtml(name.slice(0, 1))}</span>
+            ${S.escapeHtml(name)}${anon ? ' <span class="badge badge-anon">匿名</span>' : ''}
+          </span>
+          <span class="counts">
+            <span>♡ ${n.likeCount}</span>
+            <span>评 ${n.commentCount}</span>
+          </span>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function adHTML(slot) {
+    return `<div class="ad-slot" data-ad-slot="${slot}">
+      <b>广告位</b> · ${slot} · 尚未接入（后台可配置代码）
+    </div>`;
+  }
+
+  function loadMore() {
+    if (state.loading || state.done) return;
+    state.loading = true;
+    const keep = feedEl.children.length > 0;
+    let sk = null;
+    if (!keep) {
+      sk = document.createElement('div');
+      sk.className = 'skeleton';
+      feedEl.appendChild(sk);
+    }
+
+    setTimeout(() => {
+      if (sk) sk.remove();
+      feedEl.classList.remove('is-loading');
+      let { items, total } = S.feed(state);
+      // 永远滚不到尽头：翻完一轮就重新洗牌接着来
+      if (!items.length && total > 0) {
+        state.page = 0;
+        state.cycle = (state.cycle || 0) + 1;
+        items = S.feed(state).items;
+        for (let i = items.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [items[i], items[j]] = [items[j], items[i]];
+        }
+      }
+      const frag = document.createElement('div');
+      frag.innerHTML = items.map(cardHTML).join('');
+      const cards = [...frag.children];
+      cards.forEach((c, i) => {
+        if (state.page === 0 && i === 5) {
+          feedEl.insertAdjacentHTML('beforeend', adHTML('tavern-feed-1'));
+        }
+        feedEl.appendChild(c);
+      });
+      state.page++;
+      state.loading = false;
+      if (!items.length) {
+        state.done = true;
+        sentinel.innerHTML = '<div class="empty"><div class="ico">酒</div><p>没有找到相关的笔记，换个词试试。</p></div>';
+      } else {
+        sentinel.innerHTML = '<span class="small muted">继续下滑，还有酒</span>';
+      }
+      hint.textContent = '共 ' + total + ' 篇';
+      bindCards();
+      UI.renderAds();
+    }, state.page === 0 ? 80 : 260);
+  }
+
+  function bindCards() {
+    feedEl.querySelectorAll('.note-card:not([data-bound])').forEach((el) => {
+      el.dataset.bound = '1';
+      el.onclick = () => (location.href = 'note.html?id=' + el.dataset.id);
+    });
+  }
+
+  function reset() {
+    state.page = 0; state.done = false; state.loading = false;
+    if (feedEl.children.length) {
+      // 保留旧卡片，淡出后原地换新，避免白屏闪一下
+      feedEl.classList.add('is-loading');
+      state.loading = false;
+      loadMore();
+    } else {
+      loadMore();
+    }
+  }
+
+  /* 搜索 */
+  const q = document.getElementById('q');
+  function doSearch() {
+    state.q = q.value.trim();
+    document.getElementById('isbnBanner').innerHTML = /^\d{10,13}$/.test(state.q.replace(/[^0-9Xx]/g, '')) && state.q.replace(/[^0-9Xx]/g, '').length >= 10
+      ? `<div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding:16px 20px">
+           <span>这是一串 ISBN，可以按「同一本书」聚合所有笔记，按点赞排序。</span>
+           <a class="btn btn-primary btn-sm" href="isbn.html?isbn=${state.q.replace(/[^0-9Xx]/g, '')}">按同书聚合</a>
+         </div>` : '';
+    reset();
+  }
+  document.getElementById('qBtn').onclick = doSearch;
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+  let t;
+  q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(doSearch, 420); });
+
+  document.querySelectorAll('[data-sort]').forEach((el) => {
+    el.onclick = () => {
+      document.querySelectorAll('[data-sort]').forEach((x) => x.classList.remove('on'));
+      el.classList.add('on'); state.sort = el.dataset.sort; reset();
+    };
+  });
+  document.querySelectorAll('[data-scope]').forEach((el) => {
+    el.onclick = () => {
+      const on = el.classList.toggle('on');
+      state.scope = on ? 'follow' : 'all';
+      reset();
+    };
+  });
+
+  /* 无限滚动 */
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) loadMore(); });
+  }, { rootMargin: '600px' });
+  io.observe(sentinel);
+
+  loadMore();
+})();
+</script>
+</body>
+</html>

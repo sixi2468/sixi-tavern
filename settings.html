@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page page-narrow">
+  <div class="section-head" style="margin-bottom:24px">
+    <h2>设置</h2>
+    <span class="sub">资料、屏蔽词与数据</span>
+  </div>
+
+  <section class="panel">
+    <h2>我的资料</h2>
+    <p class="desc">用户名会显示在笔记与评论上；生日和签名都可以留空。</p>
+    <div class="grid-2">
+      <div class="field"><label>用户名 <span class="hint">（不能与他人重复，也不能含屏蔽词）</span></label><input class="input" id="uName"></div>
+      <div class="field"><label>生日 <span class="hint">（可留空）</span></label>
+        <div class="birth-row">
+          <select class="select" id="uBirthY"></select>
+          <select class="select" id="uBirthM"></select>
+          <select class="select" id="uBirthD"></select>
+        </div>
+      </div>
+    </div>
+    <div class="field"><label>签名</label><input class="input" id="uSign" maxlength="40" placeholder="一句话介绍自己"></div>
+    <div class="field"><label>邮箱</label><input class="input" id="uEmail" disabled></div>
+    <button class="btn btn-primary btn-sm" id="saveProfile">保存资料</button>
+  </section>
+
+  <section class="panel">
+    <h2>修改密码</h2>
+    <p class="desc">演示版密码存在本机；接后端后改由认证服务处理。</p>
+    <div class="grid-2">
+      <div class="field"><label>原密码</label><input class="input" type="password" id="oldPass" autocomplete="current-password"></div>
+      <div class="field"><label>新密码（至少 6 位）</label><input class="input" type="password" id="newPass" autocomplete="new-password"></div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="savePass">改密码</button>
+  </section>
+
+  <section class="panel">
+    <h2>默认分享方式</h2>
+    <p class="desc">新建笔记时的默认可见范围，之后每篇仍可单独修改。</p>
+    <div class="grid-2">
+      <div class="field"><label>默认可见</label>
+        <select class="select" id="defVis">
+          <option value="public">所有人可见</option>
+          <option value="followers">仅关注者可见</option>
+          <option value="private">仅自己可见</option>
+        </select>
+      </div>
+      <div class="field"><label>发布方式</label>
+        <select class="select" id="defReview">
+          <option value="1">发布前检查（推荐）</option>
+          <option value="0">直接发布</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="saveDefaults">保存</button>
+  </section>
+
+  <section class="panel">
+    <h2>屏蔽词</h2>
+    <p class="desc">发布笔记与评论时会先过一遍词库：命中即转入人工复核。默认词库覆盖导流广告、辱骂、低俗、赌博诈骗、违禁品五类，可按需增删。</p>
+    <div class="word-row" style="margin-bottom:12px">
+      <input class="input" id="newWord" placeholder="输入一个词，回车添加">
+      <button class="btn btn-sm" id="addWordBtn">添加</button>
+    </div>
+    <div class="word-cloud" id="wordCloud"></div>
+    <div class="toolbar">
+      <button class="btn btn-sm" id="exportWords">导出词库（txt）</button>
+      <label class="btn btn-sm" style="position:relative;overflow:hidden">导入词库
+        <input type="file" id="importWords" accept=".txt,.csv" hidden>
+      </label>
+      <button class="btn btn-sm" id="resetWords">恢复默认词库</button>
+      <span class="small muted" id="wordCount" style="margin-left:auto"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>数据</h2>
+    <p class="desc">演示版的全部数据存在这台设备的浏览器里。换电脑、清缓存都会丢，重要内容请先导出。</p>
+    <div class="toolbar">
+      <button class="btn btn-sm" id="exportData">导出全部数据（JSON）</button>
+      <button class="btn btn-sm" id="exportMd">导出笔记（Markdown）</button>
+      <label class="btn btn-sm" style="position:relative;overflow:hidden">导入数据
+        <input type="file" id="importData" accept=".json" hidden>
+      </label>
+      <button class="btn btn-sm" id="logoutBtn">退出登录</button>
+      <button class="btn btn-sm" id="resetData" style="color:var(--cinnabar);border-color:rgba(163,58,47,.3)">清空并重置演示数据</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>关于</h2>
+    <p class="desc" style="margin-bottom:10px">
+      四夕酒馆 v0.9（演示版）· 纯前端原型，无需服务器即可预览。<br>
+      正式上线需要：域名 + 托管（静态托管或云服务器）+ 数据库 + 对象存储 + 内容审核接口。详见随附的《上线教程》与《成本测算》。
+    </p>
+    <p class="small muted" style="margin:0">广告位：酒肆信息流、笔记详情页底部各预留一处，后台可填广告联盟代码。</p>
+  </section>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 设置</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('settings');
+
+  /* 资料 */
+  const u = S.currentUser();
+  document.getElementById('uName').value = u.username;
+  const getBirth = UI.birthPicker('uBirth', u.birthday || '');
+  document.getElementById('uSign').value = u.signature || '';
+  document.getElementById('uEmail').value = u.email;
+
+  document.getElementById('saveProfile').onclick = () => {
+    const name = document.getElementById('uName').value.trim();
+    if (name.length < 2) { UI.toast('用户名至少两个字'); return; }
+    const r = S.updateUser({
+      username: name,
+      birthday: getBirth(),
+      signature: document.getElementById('uSign').value.trim(),
+    });
+    if (r && r.ok === false) { UI.toast(r.msg); return; }
+    UI.toast('已保存'); UI.header('settings');
+  };
+
+  document.getElementById('savePass').onclick = () => {
+    const r = S.changePassword(document.getElementById('oldPass').value, document.getElementById('newPass').value);
+    if (!r.ok) { UI.toast(r.msg); return; }
+    document.getElementById('oldPass').value = '';
+    document.getElementById('newPass').value = '';
+    UI.toast('密码已改，下次用新密码登录');
+  };
+
+  /* 默认设置 */
+  const db = S.load();
+  document.getElementById('defVis').value = db.settings.defaultVisibility;
+  document.getElementById('defReview').value = db.settings.reviewAutoPass ? '1' : '0';
+  document.getElementById('saveDefaults').onclick = () => {
+    db.settings.defaultVisibility = document.getElementById('defVis').value;
+    db.settings.reviewAutoPass = document.getElementById('defReview').value === '1';
+    S.save(); UI.toast('已保存');
+  };
+
+  /* 屏蔽词 */
+  function renderWords() {
+    const words = S.blockedWords();
+    const box = document.getElementById('wordCloud');
+    box.innerHTML = words.map((w) => `<span class="word">${S.escapeHtml(w)}<i data-w="${S.escapeHtml(w)}" title="删除">×</i></span>`).join('');
+    document.getElementById('wordCount').textContent = '当前 ' + words.length + ' 个词';
+    box.querySelectorAll('[data-w]').forEach((el) => {
+      el.onclick = () => { S.removeBlockword(el.dataset.w); renderWords(); };
+    });
+  }
+  renderWords();
+
+  const addWord = () => {
+    const inp = document.getElementById('newWord');
+    const w = inp.value.trim();
+    if (!w) return;
+    if (!S.addBlockword(w)) { UI.toast('这个词已经在库里了'); return; }
+    inp.value = ''; renderWords();
+  };
+  document.getElementById('addWordBtn').onclick = addWord;
+  document.getElementById('newWord').addEventListener('keydown', (e) => { if (e.key === 'Enter') addWord(); });
+
+  document.getElementById('exportWords').onclick = () => {
+    download('# 四夕酒馆 · 自定义屏蔽词\n' + S.blockedWords().join('\n'), '四夕酒馆-屏蔽词.txt', 'text/plain');
+  };
+  document.getElementById('importWords').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const words = S.parseWords(r.result);
+      const cur = S.blockedWords();
+      const merged = [...new Set([...cur, ...words])];
+      S.setBlockwords(merged.join('\n'));
+      renderWords();
+      UI.toast('已并入 ' + words.length + ' 个词');
+    };
+    r.readAsText(f, 'utf-8');
+  };
+  document.getElementById('resetWords').onclick = () => {
+    S.setBlockwords(S.DEFAULT_BLOCKWORDS); renderWords(); UI.toast('已恢复默认词库');
+  };
+
+  /* 数据 */
+  function download(text, name, mime) {
+    const blob = new Blob([text], { type: (mime || 'application/json') + ';charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 1500);
+  }
+
+  document.getElementById('exportMd').onclick = () => {
+    download(S.exportMarkdown(), '四夕酒馆-读书笔记-' + new Date().toISOString().slice(0, 10) + '.md', 'text/markdown');
+    UI.toast('已导出 Markdown');
+  };
+
+  document.getElementById('exportData').onclick = () => {
+    download(JSON.stringify(S.load(), null, 2), '四夕酒馆-数据-' + new Date().toISOString().slice(0, 10) + '.json');
+  };
+  document.getElementById('importData').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const data = JSON.parse(r.result);
+        if (!data.users || !data.notes) throw new Error('格式不对');
+        localStorage.setItem('sixi_v3', JSON.stringify(data));
+        UI.toast('已导入，正在刷新'); setTimeout(() => location.reload(), 600);
+      } catch (err) { UI.toast('文件读不出来，换个备份试试'); }
+    };
+    r.readAsText(f, 'utf-8');
+  };
+  document.getElementById('logoutBtn').onclick = () => { S.logout(); location.href = 'index.html'; };
+  document.getElementById('resetData').onclick = () => {
+    const m = UI.modal(`
+      <h3>确定清空吗</h3>
+      <p class="sub">本机所有笔记、书籍与账号都会回到初始演示状态，无法撤销。</p>
+      <div class="modal-foot">
+        <button class="btn" data-close>算了</button>
+        <button class="btn btn-primary" id="ok">清空</button>
+      </div>`);
+    m.querySelector('[data-close]').onclick = UI.closeModal;
+    m.querySelector('#ok').onclick = () => { S.reset(); location.href = 'index.html'; };
+  };
+})();
+</script>
+</body>
+</html>

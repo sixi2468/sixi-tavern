@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>上线教程 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+<style>
+  .guide{max-width:900px;margin:0 auto}
+  .guide h1{font-family:var(--serif);font-size:30px;letter-spacing:.08em;margin:0 0 6px}
+  .guide .lead{color:var(--ink-3);font-size:13.5px;margin:0 0 26px}
+  .step{background:var(--card);border:1px solid var(--line-2);border-radius:14px;padding:24px 26px;margin-bottom:18px;box-shadow:var(--shadow-s)}
+  .step h2{font-family:var(--serif);font-size:20px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  .step h2 .n{width:26px;height:26px;border-radius:50%;background:var(--cinnabar);color:#fff;
+    font-size:13px;display:grid;place-items:center;font-family:var(--sans);flex:none}
+  .step .sub{color:var(--ink-3);font-size:12.5px;margin:0 0 16px 36px}
+  .step h3{font-size:13px;letter-spacing:.14em;color:var(--ink-3);margin:16px 0 6px}
+  .step ol,.step ul{margin:0 0 6px;padding-left:22px;font-size:14.5px;line-height:2}
+  .see{background:rgba(78,107,96,.06);border-left:3px solid var(--jade);padding:10px 14px;border-radius:0 8px 8px 0;
+    font-size:13.5px;line-height:1.9;margin:8px 0}
+  .warn{background:rgba(163,58,47,.05);border-left:3px solid var(--cinnabar);padding:10px 14px;border-radius:0 8px 8px 0;
+    font-size:13.5px;line-height:1.9;margin:8px 0}
+  .warn b,.see b{font-family:var(--serif)}
+  table.err{width:100%;border-collapse:collapse;font-size:13px}
+  table.err th,table.err td{border-bottom:1px solid var(--line-2);padding:8px 6px;text-align:left;vertical-align:top}
+  table.err th{color:var(--ink-3);font-weight:500;font-size:12px;letter-spacing:.1em}
+  .pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;background:rgba(176,141,87,.14);color:#8a6a36;margin-left:6px}
+  .top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  @media print{.step{break-inside:avoid;box-shadow:none}.no-print{display:none}}
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="guide">
+    <div class="top">
+      <div>
+        <h1>上线教程</h1>
+        <p class="lead">先 A（免费上线）后 B（接后端）。每一步都写：点什么 → 会看到什么 → 不对怎么办。</p>
+      </div>
+      <button class="btn no-print" onclick="window.print()">打印 / 存 PDF</button>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">0</span>先认清你手里是哪个包</h2>
+      <p class="sub">这一步最容易错，先看一眼文件夹。</p>
+      <table class="err">
+        <tr><th>你下载的</th><th>特征</th><th>你要做什么</th></tr>
+        <tr><td><b>上线包</b></td><td>有 <code>先看这里.txt</code>、<code>启动预览.bat</code>，<b>没有</b> <code>tools</code></td><td>直接用，<b>不需要打包</b></td></tr>
+        <tr><td><b>源码包</b></td><td>有 <code>tools</code> 文件夹、<code>一键打包.bat</code></td><td>想改代码才用</td></tr>
+      </table>
+      <div class="warn"><b>常见错误：</b>在上线包里双击「一键打包」，会报 <code>can't open file ...tools\prepare_release.py</code>。上线包已经是成品，跳过这一步。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">1</span>本地先看一眼<span class="pill">5 分钟</span></h2>
+      <p class="sub">确认网站是好的，再去折腾上传。</p>
+      <h3>你做什么</h3>
+      <ol>
+        <li>把压缩包解压到 <b>路径里没有中文和空格</b> 的地方，例如 <code>D:\sixi\</code>；</li>
+        <li>进入文件夹，双击 <b>启动预览.bat</b>（Mac 双击 <b>启动预览.command</b>）。</li>
+      </ol>
+      <h3>你会看到</h3>
+      <div class="see">黑窗口会显示一行地址（形如 <code>http://127.0.0.1:8000</code>，端口可能不同），浏览器自动打开。<br>黑窗口不要关，关了网站就停；出错时窗口会停住并显示错误码。</div>
+      <h3>不对怎么办</h3>
+      <table class="err">
+        <tr><td>黑窗口一闪就没</td><td>没装 Python。去 python.org 装，勾选 Add Python to PATH</td></tr>
+        <tr><td>浏览器没弹出来</td><td>手动打开浏览器，输入 <code>http://localhost:8000</code></td></tr>
+        <tr><td>提示端口被占用</td><td>脚本会自动换端口，以窗口显示的地址为准</td></tr>
+        <tr><td>页面空白</td><td>你是双击 index.html 打开的，改用 启动预览.bat</td></tr>
+      </table>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">2</span>注册馆主账号<span class="pill">2 分钟</span></h2>
+      <p class="sub">后台权限靠邮箱识别。</p>
+      <h3>你做什么</h3>
+      <ol>
+        <li>登录页点「注册」；</li>
+        <li>邮箱填打包时用的那个（例如 <code>sixi2468@163.com</code>）；</li>
+        <li>密码 ≥6 位，用户名随意，生日可跳过，勾选同意；</li>
+        <li>点「开一间自己的酒架」。</li>
+      </ol>
+      <div class="see">进入「我的酒架」，右上角能看到「后台」。</div>
+      <div class="warn">没有「后台」= 邮箱不是打包时填的那个。换邮箱重新注册，或用源码包重新打包并填对。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">3</span>传到 GitHub<span class="pill">10 分钟</span></h2>
+      <p class="sub">不需要装 Git，全程网页点击。</p>
+      <h3>你做什么</h3>
+      <ol>
+        <li>打开 <b>github.com</b>，注册/登录；</li>
+        <li>右上角 <b>+</b> → <b>New repository</b>；</li>
+        <li>名字填 <code>sixi-tavern</code>，选 <b>Public</b>，点 <b>Create repository</b>；</li>
+        <li>点 <b>uploading an existing file</b>；</li>
+        <li>打开解压出来的文件夹，<b>全选里面的内容</b>（不是选文件夹），拖进网页；</li>
+        <li>等进度条走完，点 <b>Commit changes</b>。</li>
+      </ol>
+      <div class="see">仓库首页出现 <code>index.html</code>、<code>assets</code> 等文件。</div>
+      <div class="warn">如果变成 <code>四夕酒馆-上线包/index.html</code>（多了一层），删掉重传，要传的是文件夹<b>里面的内容</b>。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">4</span>Cloudflare Pages 部署<span class="pill">10 分钟</span></h2>
+      <p class="sub">这一步做完，网站就上线了。</p>
+      <h3>你做什么</h3>
+      <ol>
+        <li>打开 <b>dash.cloudflare.com</b>，注册/登录；</li>
+        <li>左侧 <b>Workers &amp; Pages</b> → <b>Create</b> → <b>Pages</b> → <b>Connect to Git</b>；</li>
+        <li>授权 GitHub，选中 <code>sixi-tavern</code> → <b>Begin setup</b>；</li>
+        <li>三个框：Framework <b>None</b>；Build command <b>留空</b>；Output directory <b><code>/</code></b>；</li>
+        <li>点 <b>Save and Deploy</b>。</li>
+      </ol>
+      <div class="see">约 30 秒后出现 <code>https://xxxx.pages.dev</code>，点开就是你的网站。A 计划完成。</div>
+      <div class="warn">打开 404：输出目录没填 <code>/</code>。页面没样式：<code>assets</code> 没传上去。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">5</span>上线自测<span class="pill">5 分钟</span></h2>
+      <ul>
+        <li>手机 4G 能打开 <code>pages.dev</code></li>
+        <li>能注册、能写笔记、刷新还在</li>
+        <li>笔记页「分享」能生成图片</li>
+        <li>乱输一个地址（如 <code>/abc</code>）能看到 404 页</li>
+        <li>只有馆主邮箱能看到「后台」</li>
+      </ul>
+      <div class="warn">任意一条不过，把<b>截图和网址</b>发我。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">6</span>绑自己的域名<span class="pill">可选 · 30 分钟</span></h2>
+      <ol>
+        <li>买域名并实名（阿里云/腾讯云）；</li>
+        <li>Pages 项目 → <b>Custom domains</b> → <b>Set up a custom domain</b>；</li>
+        <li>填 <code>notes.你的域名.com</code>，按提示加 CNAME；</li>
+        <li>等 1–10 分钟，证书自动签。</li>
+      </ol>
+      <div class="see">用 Pages + 境外 DNS <b>不需要备案</b>。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">7</span>B 计划：接后端<span class="pill">1–2 天 · 可稍后</span></h2>
+      <p class="sub">什么时候做：朋友说「看不到你写的笔记」时。那不是 bug，是纯静态的边界。</p>
+      <ol>
+        <li>注册 <b>supabase.com</b>，新建项目（新加坡/东京）；</li>
+        <li>SQL Editor 里粘贴 <code>supabase/schema.sql</code> 整段，点 Run；</li>
+        <li>把 <code>assets/js/store.js</code> 换成 Supabase 版本（见 <code>docs/03-上线教程.md</code> 第五节）；</li>
+        <li>重新部署。</li>
+      </ol>
+      <div class="see">手机注册的账号电脑能登录；你写的公开笔记别人能看到。</div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">!</span>报错对照表</h2>
+      <table class="err">
+        <tr><th>报错 / 现象</th><th>真正原因</th><th>你该做什么</th></tr>
+        <tr><td>can't open file ...tools\prepare_release.py</td><td>在上线包里跑了打包脚本</td><td>不用打包，双击 启动预览.bat 或上传 GitHub</td></tr>
+        <tr><td>'python3' 不是内部或外部命令</td><td>Windows 叫 python</td><td>把命令里的 python3 换成 python</td></tr>
+        <tr><td>'python' 不是内部或外部命令</td><td>没装或没勾 PATH</td><td>重装 Python 3，勾 Add Python to PATH</td></tr>
+        <tr><td>双击 bat 闪退</td><td>Python 没装好</td><td>同上</td></tr>
+        <tr><td>浏览器显示无法访问</td><td>黑窗口被关了，或浏览器用了 localhost 而服务在 127.0.0.1</td><td>重新双击 启动预览.bat，用窗口里那行地址（127.0.0.1 开头）</td></tr>
+        <tr><td>部署后 404</td><td>输出目录不对</td><td>改成 / 重新部署</td></tr>
+        <tr><td>页面没样式</td><td>assets 没传</td><td>回 GitHub 补传 assets</td></tr>
+        <tr><td>注册后没有后台</td><td>不是馆主邮箱</td><td>用打包时填的邮箱注册</td></tr>
+        <tr><td>别人看不到我的笔记</td><td>纯静态，各存各的</td><td>做第 7 步（接后端）</td></tr>
+      </table>
+    </div>
+
+    <p class="small muted" style="text-align:center;margin:26px 0 0">
+      详细版：docs/16-傻瓜式上线教程.md　·　部署配置：deploy/　·　成本：docs/02-成本测算.md
+    </p>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>阅读小结 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page">
+  <div class="section-head" style="margin-bottom:22px">
+    <div><h2>阅读小结</h2><div class="sub">这一年，你读了多少，写了多少</div></div>
+    <button class="btn btn-sm" id="printBtn">打印 / 存 PDF</button>
+  </div>
+
+  <section id="heroCard"></section>
+  <div class="metric-grid" id="metricGrid" style="margin-top:18px;grid-template-columns:repeat(4,1fr)"></div>
+
+  <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-top:4px" id="charts">
+    <div class="chart-card">
+      <h3>近 12 个月写作篇数</h3>
+      <div id="monthChart"></div>
+    </div>
+    <div class="chart-card">
+      <h3>常写的标签</h3>
+      <div id="tagCloud" class="tag-row" style="margin-top:4px"></div>
+      <p class="small muted" id="tagHint" style="margin:14px 0 0"></p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:18px">
+    <h2>读得最多的书</h2>
+    <p class="desc">按这本书下你已经写的笔记数排序。</p>
+    <div id="topBooks"></div>
+  </div>
+
+  <div class="panel">
+    <h2>最近写的</h2>
+    <p class="desc">你写下的最后 8 篇，点进去可以继续改。</p>
+    <div id="recent"></div>
+  </div>
+
+  <p class="small muted" style="text-align:center;margin-top:26px">
+    统计只来自本机数据，不含他人内容。接后端后可扩展为跨年对比与阅读时长。
+  </p>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 阅读小结</footer>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('reading');
+
+  const notes = S.myNotes(me.id);
+  const books = S.books(me.id);
+  const published = notes.filter((n) => n.status === 'published');
+  const words = notes.reduce((a, n) => a + (n.content || '').replace(/\s/g, '').length, 0);
+  const tips = notes.reduce((a, n) => a + (n.tipped || 0), 0);
+  const likes = notes.reduce((a, n) => a + (n.likeCount || 0), 0);
+  const comments = S.load().comments.filter((c) => c.userId === me.id).length;
+
+  /* 写作日期集合 → 连续天数 */
+  const dayKey = (ts) => new Date(ts).toISOString().slice(0, 10);
+  const days = new Set(notes.map((n) => dayKey(n.createdAt)));
+  let streak = 0, cursor = new Date();
+  for (;;) {
+    const k = cursor.toISOString().slice(0, 10);
+    if (days.has(k)) { streak++; cursor.setDate(cursor.getDate() - 1); }
+    else if (streak === 0 && k === new Date().toISOString().slice(0, 10)) { cursor.setDate(cursor.getDate() - 1); }
+    else break;
+    if (streak > 400) break;
+  }
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const thisYear = notes.filter((n) => new Date(n.createdAt).getFullYear() === year).length;
+
+  /* 月度分布 */
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const s = d.getTime();
+    const e = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+    months.push({
+      label: (d.getMonth() + 1) + '月',
+      v: notes.filter((n) => n.createdAt >= s && n.createdAt < e).length,
+    });
+  }
+
+  document.getElementById('heroCard').innerHTML = `
+    <div class="card" style="padding:30px 34px;background:
+        linear-gradient(120deg, rgba(255,253,248,.96), rgba(248,240,224,.86));
+        position:relative;overflow:hidden">
+      <div style="position:absolute;right:-30px;top:-50px;font-family:var(--brush);
+        font-size:200px;line-height:1;color:rgba(163,58,47,.06)">读</div>
+      <p class="small muted" style="letter-spacing:.24em;margin:0 0 8px">${year} · 我的阅读小结</p>
+      <h1 style="font-family:var(--serif);font-size:clamp(26px,3.4vw,40px);margin:0 0 10px;letter-spacing:.08em">
+        ${S.escapeHtml(me.username)}，今年写了 <em style="font-style:normal;color:var(--cinnabar)">${thisYear}</em> 篇
+      </h1>
+      <p class="muted" style="margin:0;font-size:14px;letter-spacing:.06em">
+        共 ${books.length} 本书、${notes.length} 篇笔记、${words.toLocaleString()} 字${tips ? '，被人请了 ' + tips + ' 壶酒' : ''}。
+      </p>
+    </div>`;
+
+  const metrics = [
+    ['藏书', books.length, '本'],
+    ['笔记', notes.length, '篇'],
+    ['已发布', published.length, '篇'],
+    ['写字', words, '字'],
+    ['写作天数', days.size, '天'],
+    ['收到赞', likes, '个'],
+    ['写评论', comments, '条'],
+    ['当赏', tips, '壶'],
+  ];
+  document.getElementById('metricGrid').innerHTML = metrics.map(([k, v, u]) => `
+    <div class="metric"><div class="k">${k}</div>
+      <div class="v">${Number(v).toLocaleString()}<small>${u}</small></div></div>`).join('');
+
+  /* 柱状图 */
+  (function () {
+    const W = 640, H = 220, pad = 34, bw = 30;
+    const max = Math.max(...months.map((m) => m.v), 1);
+    const gap = (W - pad * 2) / months.length;
+    const bars = months.map((m, i) => {
+      const h = (m.v / max) * (H - pad * 2);
+      const x = pad + i * gap + gap / 2 - bw / 2;
+      return `<rect x="${x}" y="${H - pad - h}" width="${bw}" height="${h}" rx="3"
+                fill="rgba(163,58,47,${0.25 + (m.v / max) * 0.55})"/>
+              <text x="${x + bw / 2}" y="${H - pad - h - 6}" text-anchor="middle" font-size="10" fill="#8b8073">${m.v || ''}</text>
+              <text x="${x + bw / 2}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#8b8073">${m.label}</text>`;
+    }).join('');
+    document.getElementById('monthChart').innerHTML =
+      `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}</svg>`;
+  })();
+
+  /* 标签云 */
+  const tagCount = {};
+  notes.forEach((n) => (n.tags || []).forEach((t) => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const tags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  document.getElementById('tagCloud').innerHTML = tags.length
+    ? tags.map(([t, c]) => `<span class="chip on" style="font-size:${12 + Math.min(c, 6) * 1.2}px"># ${S.escapeHtml(t)} <b style="opacity:.6;font-weight:400">${c}</b></span>`).join('')
+    : '<span class="small muted">还没有标签。写笔记时加上几个，这里就会长出来。</span>';
+  document.getElementById('tagHint').textContent = tags.length
+    ? `最常写的是「${tags[0][0]}」，出现 ${tags[0][1]} 次。`
+    : '';
+
+  /* 读得最多的书 */
+  const top = books.map((b) => ({ ...b, n: notes.filter((x) => x.bookId === b.id).length }))
+    .filter((b) => b.n > 0).sort((a, b) => b.n - a.n).slice(0, 5);
+  document.getElementById('topBooks').innerHTML = top.length
+    ? top.map((b, i) => `<a class="review-row" href="book.html?id=${b.id}" style="text-decoration:none">
+        <div style="font-family:var(--serif);font-size:20px;color:${i < 3 ? 'var(--cinnabar)' : 'var(--ink-3)'};width:26px">${i + 1}</div>
+        <div class="c-main" style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+          <span><b>《${S.escapeHtml(b.title)}》</b><span class="small muted" style="margin-left:8px">${S.escapeHtml(b.author || '')}</span></span>
+          <span class="small muted">${b.n} 篇</span>
+        </div>
+      </a>`).join('')
+    : '<div class="empty" style="padding:24px"><p>还没有写过笔记。</p></div>';
+
+  /* 最近 */
+  const recent = notes.slice(0, 8);
+  document.getElementById('recent').innerHTML = recent.length
+    ? recent.map((n) => `<a class="mini-note" href="note.html?id=${n.id}" style="display:flex;justify-content:space-between;gap:14px">
+        <span>${S.escapeHtml(n.title)}<em>《${S.escapeHtml(n.book ? n.book.title : '')}》 · ${S.fmtTime(n.createdAt)}</em></span>
+        <span class="small muted" style="flex:none">${UI.statusBadge(n.status) || ''} ♡ ${n.likeCount}</span>
+      </a>`).join('')
+    : '<div class="empty" style="padding:24px"><p>还没有笔记。</p></div>';
+
+  document.getElementById('printBtn').onclick = () => window.print();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>寻书 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page page-narrow">
+  <div class="tavern-hero" style="margin-bottom:22px">
+    <div>
+      <h1>寻书</h1>
+      <p>搜书名、作者、ISBN，看看同一本书被多少人读过、写下了什么。</p>
+    </div>
+    <div class="search-box">
+      <input id="isbnInput" type="search" placeholder="书名 / 作者 / ISBN">
+      <button class="btn btn-primary btn-sm" id="isbnGo">寻</button>
+    </div>
+  </div>
+  <div id="isbnBody"></div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 寻书</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('isbn');
+
+  const input = document.getElementById('isbnInput');
+  const body = document.getElementById('isbnBody');
+
+  function go() {
+    const raw = input.value.trim();
+    if (!raw) { UI.toast('先输入点什么'); return; }
+    const digits = raw.replace(/[^0-9Xx]/g, '');
+    if (/^[0-9Xx]{10,13}$/.test(digits) && digits.length === raw.replace(/\s/g, '').length) {
+      location.href = 'isbn.html?isbn=' + digits;
+    } else {
+      location.href = 'isbn.html?q=' + encodeURIComponent(raw);
+    }
+  }
+  document.getElementById('isbnGo').onclick = go;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+  const isbn = UI.param('isbn');
+  const q = UI.param('q');
+
+  if (!isbn && !q) {
+    body.innerHTML = `<div class="empty"><div class="ico">书</div>
+      <p>输入 ISBN，会把同一本书的笔记聚成一页；<br>输入书名或作者，会找出这本书和相关的书评。</p>
+      <p class="small muted">试试：9787101141906，或者「张岱」。</p></div>`;
+    return;
+  }
+
+  if (isbn) { input.value = isbn; renderIsbn(isbn); }
+  else { input.value = q; renderSearch(q); }
+
+  /* ---------- 按 ISBN 聚合 ---------- */
+  function renderIsbn(isbn) {
+    const books = S.booksByIsbn(isbn);
+    if (!books.length) {
+      body.innerHTML = `<div class="empty"><div class="ico">空</div>
+        <p>还没有人导入过 ISBN ${S.escapeHtml(isbn)} 的书。</p>
+        <a class="btn btn-primary" href="shelf.html">去酒架添一本</a></div>`;
+      return;
+    }
+    const notes = books.flatMap((b) => S.notesOfBook(b.id))
+      .filter((n) => n.status === 'published')
+      .sort((a, b) => S.hotScore(b) - S.hotScore(a));
+    const first = books[0];
+
+    body.innerHTML = `
+      <div class="card" style="padding:24px 26px;margin-bottom:22px;display:flex;gap:22px;flex-wrap:wrap;align-items:center">
+        <div style="width:110px;flex:none">${UI.coverHTML(first)}</div>
+        <div style="flex:1;min-width:220px">
+          <h2 style="font-family:var(--serif);font-size:22px;margin:0 0 6px">《${S.escapeHtml(first.title)}》</h2>
+          <p class="muted" style="margin:0 0 4px">${S.escapeHtml(first.author || '佚名')} · ${S.escapeHtml(first.publisher || '')}</p>
+          <p class="small muted" style="margin:0">ISBN ${S.escapeHtml(isbn)} · ${books.length} 位馆友导入 · ${notes.length} 篇笔记</p>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--serif);font-size:30px;color:var(--cinnabar)">${notes.reduce((a, n) => a + n.likeCount, 0)}</div>
+          <div class="small muted">合计获赞</div>
+        </div>
+      </div>
+      <div class="section-head"><h2>同书共读</h2><span class="sub">按热度排序</span></div>
+      <div id="aggList"></div>`;
+
+    const list = document.getElementById('aggList');
+    if (!notes.length) {
+      list.innerHTML = '<div class="empty"><p>这本书还没有公开的笔记。</p></div>';
+      return;
+    }
+    list.innerHTML = notes.map((n, i) => `
+      <a class="card" href="note.html?id=${n.id}" style="display:flex;gap:16px;padding:18px 20px;margin-bottom:12px;align-items:center">
+        <span style="font-family:var(--serif);font-size:22px;color:${i < 3 ? 'var(--cinnabar)' : 'var(--ink-3)'};width:30px;flex:none;text-align:center">${i + 1}</span>
+        <div style="flex:1;min-width:0">
+          <h3 style="font-family:var(--serif);font-size:16.5px;margin:0 0 4px;font-weight:600">${S.escapeHtml(n.title)}</h3>
+          <p class="small muted" style="margin:0 0 6px">${S.escapeHtml(S.excerpt(n.content, 80))}…</p>
+          <div class="small muted">
+            ${n.anonymous ? '<span class="badge badge-anon">匿名</span>' : '<span class="badge badge-real">实名</span>'}
+            ${n.anonymous ? '无名酒客' : S.escapeHtml(n.author ? n.author.username : '')} · ${S.fmtTime(n.createdAt)}
+          </div>
+        </div>
+        <div style="text-align:right;flex:none">
+          <div style="font-family:var(--serif);font-size:20px">♡ ${n.likeCount}</div>
+          <div class="small muted">评 ${n.commentCount}</div>
+        </div>
+      </a>`).join('');
+  }
+
+  /* ---------- 文字搜索 ---------- */
+  function renderSearch(q) {
+    const k = q.trim().toLowerCase();
+    const d = S.load();
+
+    const bookHit = d.books.filter((b) =>
+      (b.title + ' ' + (b.author || '') + ' ' + (b.publisher || '') + ' ' + (b.isbn || '')).toLowerCase().includes(k));
+    const bookIds = bookHit.map((b) => b.id);
+
+    const noteHit = d.notes.filter((n) => {
+      if (n.status !== 'published') return false;
+      if (!S.canView(n.id)) return false;
+      return bookIds.includes(n.bookId) ||
+        (n.title + ' ' + n.content + ' ' + (n.tags || []).join(' ')).toLowerCase().includes(k);
+    }).map((n) => S.note(n.id)).sort((a, b) => S.hotScore(b) - S.hotScore(a));
+
+    if (!bookHit.length && !noteHit.length) {
+      body.innerHTML = `<div class="empty"><div class="ico">空</div>
+        <p>没有找到「${S.escapeHtml(q)}」相关的书或笔记。</p>
+        <p class="small muted">换个书名、作者，或者直接用 ISBN 试试。</p></div>`;
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="section-head" style="margin-bottom:14px">
+        <h2>和「${S.escapeHtml(q)}」有关</h2>
+        <span class="sub">${bookHit.length} 本书 · ${noteHit.length} 篇笔记</span>
+      </div>
+      ${bookHit.length ? `<div class="books-grid" style="margin-bottom:26px">${bookHit.slice(0, 12).map((b) => `
+        <div class="book-item" data-book="${b.id}">
+          ${UI.coverHTML(b, { badge: b.isbn ? 'ISBN' : '' })}
+          <h3>${S.escapeHtml(b.title)}</h3>
+          <div class="meta"><span>${S.escapeHtml(b.author || '佚名')}</span></div>
+        </div>`).join('')}</div>` : ''}
+      ${noteHit.length ? `<div class="section-head"><h2>书评与笔记</h2><span class="sub">按热度</span></div>
+      <div id="searchNotes"></div>` : ''}`;
+
+    const box = document.getElementById('searchNotes');
+    if (box) {
+      box.innerHTML = noteHit.map((n) => `
+        <a class="card" href="note.html?id=${n.id}" style="display:block;padding:16px 20px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;gap:14px">
+            <h3 style="font-family:var(--serif);font-size:16.5px;margin:0 0 4px;font-weight:600">${S.escapeHtml(n.title)}</h3>
+            <span class="small muted" style="flex:none">♡ ${n.likeCount}</span>
+          </div>
+          <p class="small muted" style="margin:0 0 6px">《${S.escapeHtml(n.book ? n.book.title : '')}》 · ${S.escapeHtml(n.anonymous ? '无名酒客' : (n.author ? n.author.username : ''))} · ${S.fmtTime(n.createdAt)}</p>
+          <p class="small muted" style="margin:0">${S.escapeHtml(S.excerpt(n.content, 90))}…</p>
+        </a>`).join('');
+    }
+
+    body.querySelectorAll('[data-book]').forEach((el) => {
+      el.onclick = () => (location.href = 'book.html?id=' + el.dataset.book);
+    });
+  }
+})();
+</script>
+</body>
+</html>

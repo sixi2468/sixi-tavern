@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>关于酒馆 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page page-narrow">
+  <div class="section-head" style="margin-bottom:26px">
+    <div><h2>关于酒馆</h2><div class="sub">一间存读书笔记的小店</div></div>
+  </div>
+
+  <section class="panel">
+    <div class="prose">
+      <p>四夕酒馆是一个安静的读书笔记站。名字取自"肆"字拆开——店肆、放肆，也取"夕"字的一点暮色。</p>
+      <p>这里只做三件事：<b>把自己的笔记存好</b>、<b>把愿意分享的递出去</b>、<b>让读到的人能说两句话</b>。没有热搜，没有推荐算法，没有"猜你喜欢"。</p>
+
+      <h3>怎么用</h3>
+      <ul>
+        <li><b>添书</b>：自己填书名，或者输入 ISBN 让系统去查；封面可以自己传，不传就生成一册线装书。</li>
+        <li><b>写笔记</b>：按书归档，可以分类，可以只给自己看。</li>
+        <li><b>去酒肆</b>：读别人公开的笔记，可以点赞、评论、当赏一壶酒。</li>
+      </ul>
+
+      <h3>为什么有"当赏"</h3>
+      <p>读书是很私人的事，写出来却要一点勇气。一壶酒不值什么钱，是个"我读到了，谢谢"的意思。演示版只记壶数，不接真实支付。</p>
+
+      <h3>关于匿名</h3>
+      <p>匿名是为了让人敢说真话，不是为了让人不必负责。匿名内容在排序上按实名的 2/3 计权，后台仍记录发布者——这条写在用户协议里。</p>
+
+      <h3>技术与边界</h3>
+      <p>当前是纯前端原型：数据存在你自己的浏览器里，换设备不同步。正式版会接账号与数据库，具体计划见随附的上线教程。</p>
+
+      <h3>联系</h3>
+      <p>功能建议、内容举报、合作：点右上角「驿站」提交，我们会看到。<span id="contactEmailBox"></span></p>
+      <p class="meta">最近更新：2026-11</p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 读书笔记</footer>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+UI.header('about');
+(function () {
+  const mail = (window.SIXI_CONFIG || {}).contactEmail;
+  const box = document.getElementById('contactEmailBox');
+  if (mail && box) box.innerHTML = '也可以写信到 <b>' + mail.replace(/</g,'&lt;') + '</b>。';
+})();
+</script>
+</body>
+</html>

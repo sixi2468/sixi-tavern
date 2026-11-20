@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>写笔记 · 四夕酒馆</title>
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="page page-narrow">
+  <div class="section-head" style="margin-bottom:18px">
+    <div><h2>写笔记</h2><div class="sub" id="writeSub">慢慢写，回头还能改。</div></div>
+  </div>
+
+  <div id="bookBar"></div>
+
+  <div class="card" style="padding:26px 28px;margin-top:16px">
+    <div class="field">
+      <label>标题</label>
+      <input class="input" id="wTitle" placeholder="给这篇笔记起个名字" maxlength="120">
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label>页码 <span class="hint">（选填，如 42 或 42-45）</span></label>
+        <input class="input" id="wPage" placeholder="读到第几页" maxlength="16">
+      </div>
+      <div class="field">
+        <label>标签 <span class="hint">（逗号分隔）</span></label>
+        <input class="input" id="wTags" placeholder="如：历史, 制度">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>正文</label>
+      <textarea class="textarea" id="wBody" style="min-height:320px" placeholder="读到什么，想到什么。每段一行，段首会自动缩进两个字。"></textarea>
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label>谁可以看</label>
+        <select class="select" id="wVis">
+          <option value="public">所有人可见（会出现在酒肆）</option>
+          <option value="followers">仅关注者可见</option>
+          <option value="private">仅自己可见</option>
+        </select>
+      </div>
+      <div class="field" style="justify-content:flex-end">
+        <label class="checkline" style="height:44px"><input type="checkbox" id="wAnon"> 匿名分享（不显示名字）</label>
+      </div>
+    </div>
+
+    <div class="toolbar" style="justify-content:flex-end;margin-top:8px">
+      <a class="btn" href="shelf.html" id="cancelBtn">取消</a>
+      <button class="btn" id="draftBtn">存草稿</button>
+      <button class="btn btn-primary" id="publishBtn">发布</button>
+    </div>
+  </div>
+</main>
+
+<footer class="site-foot">四夕酒馆 · 写笔记</footer>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  const me = UI.requireAuth();
+  if (!me) return;
+  UI.header('shelf');
+
+  const books = S.books(me.id);
+  const bookId = UI.param('book') || (books[0] && books[0].id);
+  const book = books.find((b) => b.id === bookId);
+
+  document.getElementById('cancelBtn').href = book ? 'book.html?id=' + book.id : 'shelf.html';
+
+  if (!book) {
+    document.getElementById('bookBar').innerHTML = `
+      <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:16px">
+        <p style="margin:0">还没有书。先添一本，再来写。</p>
+        <a class="btn btn-primary btn-sm" href="shelf.html">去酒架</a>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('writeSub').textContent = '正在为《' + book.title + '》写笔记。';
+  document.getElementById('bookBar').innerHTML = `
+    <div class="card" style="padding:16px 20px;display:flex;gap:16px;align-items:center">
+      <div style="width:54px;flex:none">${UI.coverHTML(book)}</div>
+      <div style="flex:1">
+        <b style="font-family:var(--serif);font-size:17px">${S.escapeHtml(book.title)}</b>
+        <div class="small muted">${S.escapeHtml(book.author || '佚名')}${book.publisher ? ' · ' + S.escapeHtml(book.publisher) : ''}</div>
+      </div>
+      <a class="btn btn-sm" href="book.html?id=${book.id}">这本书</a>
+    </div>`;
+
+  const title = document.getElementById('wTitle');
+  const page = document.getElementById('wPage');
+  const body = document.getElementById('wBody');
+  const tags = document.getElementById('wTags');
+  const vis = document.getElementById('wVis');
+  const anon = document.getElementById('wAnon');
+
+  // 默认可见性
+  const settings = S.load().settings || {};
+  if (settings.defaultVisibility) vis.value = settings.defaultVisibility;
+
+  function collect() {
+    return {
+      bookId: book.id,
+      title: title.value.trim(),
+      page: page.value.trim(),
+      content: body.value.trim(),
+      tags: tags.value.split(/[,，\s]+/).filter(Boolean),
+      visibility: vis.value,
+      anonymous: anon.checked,
+    };
+  }
+
+  function validate(d) {
+    if (!d.title) { UI.toast('还差一个标题'); title.focus(); return false; }
+    if (d.content.length < 10) { UI.toast('正文太短了，多写两句'); body.focus(); return false; }
+    return true;
+  }
+
+  function save(draft) {
+    const d = collect();
+    if (!validate(d)) return;
+    const r = S.addNote(d, { draft });
+    if (r.error) { UI.toast(r.error); return; }
+    if (r.hits && r.hits.length) {
+      UI.toast('这段文字暂时发不出去，换个说法试试');
+      return;
+    }
+    if (draft) {
+      UI.toast('已存草稿');
+      setTimeout(() => (location.href = 'shelf.html'), 500);
+    } else {
+      UI.toast('已发布');
+      setTimeout(() => (location.href = 'note.html?id=' + r.note.id), 500);
+    }
+  }
+
+  document.getElementById('draftBtn').onclick = () => save(true);
+  document.getElementById('publishBtn').onclick = () => save(false);
+
+  // Ctrl/Cmd + Enter 发布
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save(false);
+  });
+
+  title.focus();
+})();
+</script>
+</body>
+</html>

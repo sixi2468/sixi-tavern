@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>四夕酒馆 · 登录</title>
+<meta name="description" content="四夕酒馆 —— 记录与分享读书笔记的地方。">
+<link rel="icon" href="assets/img/seal2.png">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<div id="app-header"></div>
+
+<main class="auth-wrap">
+  <section class="auth-left">
+    <img class="auth-halo" src="assets/img/seal1.png" alt="">
+    <img class="auth-title" src="assets/img/title.png" alt="四夕酒馆">
+    <div class="auth-couplet">
+      <h1>一盏灯，一卷书</h1>
+      <p>把读过的字，酿成自己的酒。<br>在这里记下批注、摘句与心事，<br>也去别人的酒肆里坐坐。</p>
+    </div>
+    <div class="auth-marks">
+      <div><b id="stUsers">—</b>位酒客</div>
+      <div><b id="stNotes">—</b>篇笔记</div>
+      <div><b id="stBooks">—</b>本书</div>
+    </div>
+  </section>
+
+  <section class="auth-right">
+    <div class="auth-card" id="authCard">
+      <h2>入馆</h2>
+      <p class="lead">用邮箱留个座，往后慢慢喝。</p>
+
+      <div class="tabs" id="authTabs">
+        <button class="on" data-tab="login">登录</button>
+        <button data-tab="register">注册</button>
+      </div>
+
+      <!-- 登录 -->
+      <form id="loginForm">
+        <div class="field">
+          <label>邮箱</label>
+          <input class="input" type="email" id="loginEmail" placeholder="you@example.com" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input class="input" type="password" id="loginPass" placeholder="至少 6 位" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-lg" style="width:100%" type="submit">推门而入</button>
+      </form>
+
+      <!-- 注册 -->
+      <form id="registerForm" style="display:none">
+        <div class="field">
+          <label>邮箱</label>
+          <input class="input" type="email" id="regEmail" placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input class="input" type="password" id="regPass" placeholder="至少 6 位" required>
+        </div>
+        <div class="field">
+          <label>用户名 <span class="hint">（必填，别人会看到这个名字）</span></label>
+          <input class="input" type="text" id="regName" placeholder="给自己取个名号" maxlength="16" required>
+        </div>
+        <div class="field">
+          <label>生日 <span class="hint">（选填，不填也行）</span></label>
+          <div class="birth-row">
+            <select class="select" id="regBirthY"></select>
+            <select class="select" id="regBirthM"></select>
+            <select class="select" id="regBirthD"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label>签名 <span class="hint">（选填）</span></label>
+          <input class="input" type="text" id="regSign" placeholder="一句话介绍自己" maxlength="40">
+        </div>
+        <div class="field">
+          <label>人机验证 <span class="hint">（防止机器注册）</span></label>
+          <input class="input" id="regCaptcha" inputmode="numeric" placeholder="请回答下面的算式">
+        </div>
+        <label class="checkline" style="margin-bottom:18px">
+          <input type="checkbox" id="regAgree">
+          <span>我已阅读并同意《酒馆公约》与《隐私说明》</span>
+        </label>
+        <button class="btn btn-primary btn-lg" style="width:100%" type="submit">开一间自己的酒架</button>
+      </form>
+
+      <div class="divider-or">或</div>
+      <button class="btn" style="width:100%" id="guestBtn">先以游客身份逛逛</button>
+    </div>
+  </section>
+</main>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  const S = Store;
+  UI.watermark();
+  (function () {
+    const st = Store.stats();
+    const books = Store.load().books.length;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('stUsers', st.users); set('stNotes', st.notes); set('stBooks', books);
+  })();
+
+  const card = document.getElementById('authCard');
+  const tabs = document.getElementById('authTabs');
+  const loginForm = document.getElementById('loginForm');
+  const regForm = document.getElementById('registerForm');
+
+  // 已登录：显示继续入口
+  const getBirth = UI.birthPicker('regBirth');
+  const capA = 3 + Math.floor(Math.random() * 6);
+  const capB = 2 + Math.floor(Math.random() * 6);
+  const capInput = document.getElementById('regCaptcha');
+  if (capInput) capInput.placeholder = capA + ' + ' + capB + ' = ?';
+
+  const me = S.currentUser();
+  if (me) {
+    card.innerHTML = `
+      <h2>欢迎回来</h2>
+      <p class="lead">${S.escapeHtml(me.username)}，酒还温着。</p>
+      <a class="btn btn-primary btn-lg" style="width:100%" href="shelf.html">回到我的酒架</a>
+      <div style="height:10px"></div>
+      <a class="btn" style="width:100%" href="tavern.html">去酒肆坐坐</a>
+      <p class="auth-foot"><a id="switchAcc">换一个账号</a></p>`;
+    document.getElementById('switchAcc').onclick = () => { S.logout(); location.reload(); };
+    return;
+  }
+
+  tabs.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...tabs.children].forEach((x) => x.classList.toggle('on', x === b));
+    const isLogin = b.dataset.tab === 'login';
+    loginForm.style.display = isLogin ? '' : 'none';
+    regForm.style.display = isLogin ? 'none' : '';
+  });
+
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const r = S.login(document.getElementById('loginEmail').value, document.getElementById('loginPass').value);
+    if (!r.ok) { UI.toast(r.msg); return; }
+    const next = UI.param('next');
+    location.href = next ? decodeURIComponent(next) : 'shelf.html';
+  });
+
+  regForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!document.getElementById('regAgree').checked) { UI.toast('先勾选一下公约吧'); return; }
+    if (parseInt(document.getElementById('regCaptcha').value, 10) !== capA + capB) {
+      UI.toast('人机验证不对，再算一次'); return;
+    }
+    const r = S.register({
+      email: document.getElementById('regEmail').value,
+      pass: document.getElementById('regPass').value,
+      username: document.getElementById('regName').value,
+      birthday: getBirth(),
+      signature: document.getElementById('regSign').value,
+    });
+    if (!r.ok) { UI.toast(r.msg); return; }
+    UI.toast('开张了，欢迎入馆');
+    setTimeout(() => (location.href = 'shelf.html'), 500);
+  });
+
+  document.getElementById('guestBtn').onclick = () => {
+    S.guest(); location.href = 'shelf.html';
+  };
+})();
+</script>
+</body>
+</html>
